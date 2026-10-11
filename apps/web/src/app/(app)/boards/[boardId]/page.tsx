@@ -1394,8 +1394,10 @@ export default function BoardPage() {
           onClose={() => setIsMembersModalOpen(false)}
           workspaceName={workspace.name}
           boardName={board?.title ?? "Board"}
+          members={members}
           guests={boardGuests}
-          activeGuestIds={activeBoardUserIds}
+          activeUserIds={activeBoardUserIds}
+          currentUserId={user.id}
           isOwner={isOwner}
           onInvite={handleInviteGuest}
           onRemove={handleRemoveGuest}

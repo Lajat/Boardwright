@@ -60,11 +60,20 @@ export function NotificationBell() {
 
   useEffect(() => {
     if (!accessToken) return;
-    const nextSnooze = notifications
-      .map((item) => item.snoozedUntil ? new Date(item.snoozedUntil).getTime() : Infinity)
-      .filter((time) => time > Date.now())
-      .sort((a, b) => a - b)[0];
-    if (!nextSnooze) return;
+    // Only notifications that ARE actually snoozed, with a real future
+    // timestamp. Previously, every non-snoozed item was mapped to Infinity
+    // as a sentinel "no deadline" value and left in the list; since most
+    // notifications have no snooze, nextSnooze was Infinity on almost every
+    // render, `!Infinity` is false so the early-return never caught it, and
+    // `setTimeout(fn, Infinity)` is coerced by the browser to a 0ms delay —
+    // firing immediately, refetching, producing a new `notifications`
+    // array, and re-running this very effect. That was a tight loop hitting
+    // GET /notifications nonstop for any user with no snoozed invitations.
+    const futureSnoozeTimes = notifications
+      .map((item) => (item.snoozedUntil ? new Date(item.snoozedUntil).getTime() : null))
+      .filter((time): time is number => time !== null && time > Date.now());
+    if (futureSnoozeTimes.length === 0) return;
+    const nextSnooze = Math.min(...futureSnoozeTimes);
     const timer = window.setTimeout(async () => {
       try {
         const result = await apiFetch<{ items: Notification[]; unreadCount: number }>("/notifications", { accessToken });
