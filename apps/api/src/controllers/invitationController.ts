@@ -1,0 +1,258 @@
+import { Request, Response } from "express";
+import { Types } from "mongoose";
+import { BoardModel } from "../models/Board";
+import { InviteDecisionModel, InvitationModel } from "../models/Invitation";
+import { NotificationModel } from "../models/Notification";
+import { UserModel } from "../models/User";
+import { WorkspaceModel } from "../models/Workspace";
+import { isWorkspaceMember } from "../lib/permissions";
+import { notificationResponse, notifyUser } from "../lib/notify";
+import type { InvitePreview, Workspace, WorkspaceMember } from "@fluxboard/shared-types";
+import { SocketEvents } from "@fluxboard/shared-types";
+
+const SNOOZE_DURATION_MS = 24 * 60 * 60 * 1000;
+
+function workspaceResponse(doc: any): Workspace {
+  return {
+    id: doc._id.toString(),
+    name: doc.name,
+    ownerId: doc.ownerId.toString(),
+    memberIds: doc.memberIds.map((id: Types.ObjectId) => id.toString()),
+    createdAt: doc.createdAt.toISOString(),
+  };
+}
+
+async function findInviteTarget(token: string) {
+  const invitation = await InvitationModel.findOne({ token });
+  if (invitation) {
+    if (invitation.scope === "workspace") {
+      const workspace = await WorkspaceModel.findById(invitation.targetId);
+      return workspace ? { invitation, scope: "workspace" as const, workspace } : null;
+    }
+    const board = await BoardModel.findById(invitation.targetId);
+    if (!board) return null;
+    const workspace = await WorkspaceModel.findById(board.workspaceId);
+    return workspace ? { invitation, scope: "board" as const, board, workspace } : null;
+  }
+
+  const workspace = await WorkspaceModel.findOne({ inviteToken: token });
+  if (workspace) return { invitation: null, scope: "workspace" as const, workspace };
+  const board = await BoardModel.findOne({ inviteToken: token });
+  if (!board) return null;
+  const parentWorkspace = await WorkspaceModel.findById(board.workspaceId);
+  return parentWorkspace
+    ? { invitation: null, scope: "board" as const, board, workspace: parentWorkspace }
+    : null;
+}
+
+export async function previewInvite(req: Request, res: Response) {
+  const { token } = req.params;
+  const target = await findInviteTarget(token);
+  if (!target) return res.status(404).json({ error: "This invitation link is invalid or has expired." });
+
+  const inviterId = target.invitation?.inviterId ?? target.workspace.ownerId;
+  const inviter = await UserModel.findById(inviterId).select("displayName");
+  let status: InvitePreview["status"] = "pending";
+  let snoozedUntil: string | undefined;
+  let permissions: InvitePreview["permissions"];
+
+  if (target.invitation) {
+    if (req.userId && target.invitation.recipientId.toString() !== req.userId) {
+      return res.status(404).json({ error: "This invitation was sent to another account." });
+    }
+    const alreadyHasAccess = req.userId && (
+      target.scope === "workspace"
+        ? isWorkspaceMember(target.workspace, req.userId)
+        : isWorkspaceMember(target.workspace, req.userId) ||
+          target.board.guestPermissions.some((guest) => guest.userId.toString() === req.userId)
+    );
+    const expiredSnooze =
+      target.invitation.status === "snoozed" &&
+      (!target.invitation.snoozedUntil || target.invitation.snoozedUntil.getTime() <= Date.now());
+    status = alreadyHasAccess
+      ? "already_has_access"
+      : target.invitation.status === "accepted" || target.invitation.status === "revoked"
+        ? "closed"
+        : expiredSnooze
+          ? "pending"
+          : target.invitation.status;
+    if (!expiredSnooze && target.invitation.snoozedUntil) {
+      snoozedUntil = target.invitation.snoozedUntil.toISOString();
+    }
+    if (target.scope === "board") {
+      permissions = {
+        canAdd: target.invitation.canAddCards,
+        canEdit: target.invitation.canEditCards,
+        canDelete: target.invitation.canDeleteCards,
+      };
+    }
+  } else if (req.userId) {
+    const decision = await InviteDecisionModel.findOne({
+      userId: req.userId,
+      inviteToken: token,
+    });
+    if (target.scope === "workspace" && isWorkspaceMember(target.workspace, req.userId)) {
+      status = "already_has_access";
+    } else if (target.scope === "board" && (
+      isWorkspaceMember(target.workspace, req.userId) ||
+      target.board.guestPermissions.some((guest) => guest.userId.toString() === req.userId)
+    )) {
+      status = "already_has_access";
+    } else if (decision?.status === "snoozed" && decision.snoozedUntil && decision.snoozedUntil > new Date()) {
+      status = "snoozed";
+      snoozedUntil = decision.snoozedUntil.toISOString();
+    } else if (decision?.status === "declined") {
+      status = "declined";
+    }
+  }
+
+  const preview: InvitePreview = {
+    token,
+    scope: target.scope,
+    workspaceName: target.workspace.name,
+    ...(target.scope === "board" ? { boardName: target.board.title } : {}),
+    resourceLink: target.scope === "workspace"
+      ? `/workspaces/${target.workspace.id}`
+      : `/boards/${target.board.id}`,
+    inviterName: inviter?.displayName ?? "A workspace owner",
+    status,
+    ...(snoozedUntil ? { snoozedUntil } : {}),
+    isDirectInvite: !!target.invitation,
+    ...(permissions ? { permissions } : {}),
+  };
+  res.json(preview);
+}
+
+export async function respondToInvite(req: Request, res: Response) {
+  const { token } = req.params;
+  const { action } = req.body as { action?: string };
+  if (!["accept", "decline", "snooze"].includes(action ?? "")) {
+    return res.status(400).json({ error: "action must be accept, decline, or snooze" });
+  }
+
+  const target = await findInviteTarget(token);
+  if (!target) return res.status(404).json({ error: "This invitation link is invalid or has expired." });
+
+  const user = await UserModel.findById(req.userId);
+  if (!user) return res.status(404).json({ error: "User not found." });
+  const io = req.app.get("io");
+  const targetId = target.scope === "workspace" ? target.workspace._id : target.board._id;
+
+  if (target.invitation && target.invitation.recipientId.toString() !== req.userId) {
+    return res.status(404).json({ error: "This invitation was sent to another account." });
+  }
+  if (target.invitation && ["accepted", "declined", "revoked"].includes(target.invitation.status)) {
+    return res.status(409).json({ error: "This invitation has already been responded to." });
+  }
+
+  const alreadyHasAccess = target.scope === "workspace"
+    ? isWorkspaceMember(target.workspace, req.userId!)
+    : isWorkspaceMember(target.workspace, req.userId!) ||
+      target.board.guestPermissions.some((guest) => guest.userId.toString() === req.userId);
+
+  if (action === "accept" && !alreadyHasAccess) {
+    if (target.scope === "workspace") {
+      target.workspace.memberIds.push(user._id);
+      await target.workspace.save();
+      const member: WorkspaceMember = {
+        id: user._id.toString(),
+        email: user.email,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        role: "member",
+        permissions: {
+          canAdd: true, canEdit: true, canDelete: true,
+          canEditWorkspace: false,
+          canAddBoards: true, canEditBoards: true, canDeleteBoards: true,
+          canAddCards: true, canEditCards: true, canDeleteCards: true,
+        },
+      };
+      io.to(`workspace:${target.workspace.id}`).emit(SocketEvents.MEMBER_ADDED, {
+        workspaceId: target.workspace.id,
+        member,
+      });
+      io.to(`user:${req.userId}`).emit(SocketEvents.MEMBER_ADDED, {
+        workspaceId: target.workspace.id,
+        member,
+        workspace: {
+          ...workspaceResponse(target.workspace),
+          myPermissions: member.permissions,
+        },
+      });
+    } else {
+      target.board.guestPermissions.push({
+        userId: user._id,
+        canAddCards: target.invitation?.canAddCards ?? true,
+        canEditCards: target.invitation?.canEditCards ?? true,
+        canDeleteCards: target.invitation?.canDeleteCards ?? true,
+      });
+      await target.board.save();
+      io.to(`user:${req.userId}`).emit(SocketEvents.ACCESS_GRANTED, {
+        workspaceId: target.workspace.id,
+        workspaceName: target.workspace.name,
+        resourceType: "board",
+        resourceId: target.board.id,
+        resourceName: target.board.title,
+      });
+    }
+  }
+
+  if (target.invitation) {
+    target.invitation.status = action === "accept" ? "accepted" : action === "decline" ? "declined" : "snoozed";
+    target.invitation.snoozedUntil = action === "snooze" ? new Date(Date.now() + SNOOZE_DURATION_MS) : undefined;
+    await target.invitation.save();
+    if (target.invitation.notificationId) {
+      const notification = await NotificationModel.findByIdAndUpdate(
+        target.invitation.notificationId,
+        {
+          ...(action === "snooze"
+            ? { snoozedUntil: target.invitation.snoozedUntil, isResolved: false, isRead: true }
+            : { isResolved: true, snoozedUntil: null, isRead: true }),
+        },
+        { new: true }
+      );
+      if (notification) {
+        io.to(`user:${req.userId}`).emit(SocketEvents.NOTIFICATION_UPDATED, notificationResponse(notification));
+      }
+    }
+    if (action !== "snooze") {
+      const actionLabel = action === "accept" ? "accepted" : "declined";
+      await notifyUser(io, target.invitation.inviterId.toString(), {
+        type: "invitation_response",
+        title: `Invitation ${actionLabel}`,
+        body: `${user.displayName} ${actionLabel} your invitation to ${target.scope === "workspace" ? `"${target.workspace.name}"` : `"${target.board.title}"`}.`,
+        link: target.scope === "workspace" ? `/workspaces/${target.workspace.id}` : `/boards/${target.board.id}`,
+      });
+    }
+  } else {
+    await InviteDecisionModel.findOneAndUpdate(
+      { userId: user._id, inviteToken: token },
+      {
+        scope: target.scope,
+        targetId,
+        inviteToken: token,
+        status: action === "accept" ? "accepted" : action === "decline" ? "declined" : "snoozed",
+        snoozedUntil: action === "snooze" ? new Date(Date.now() + SNOOZE_DURATION_MS) : null,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    if (action !== "snooze") {
+      // Share links don't have a separate invite record, so the resource
+      // owner is the inviter to notify about the outcome.
+      const actionLabel = action === "accept" ? "accepted" : "declined";
+      await notifyUser(io, target.workspace.ownerId.toString(), {
+        type: "invitation_response",
+        title: `Invite link ${actionLabel}`,
+        body: `${user.displayName} ${actionLabel} your invitation to "${target.scope === "workspace" ? target.workspace.name : target.board.title}".`,
+        link: target.scope === "workspace" ? `/workspaces/${target.workspace.id}` : `/boards/${target.board.id}`,
+      });
+    }
+  }
+
+  res.json({
+    action,
+    status: action === "snooze" ? "snoozed" : action === "decline" ? "declined" : "accepted",
+    snoozedUntil: action === "snooze" ? new Date(Date.now() + SNOOZE_DURATION_MS).toISOString() : undefined,
+    link: target.scope === "workspace" ? `/workspaces/${target.workspace.id}` : `/boards/${target.board.id}`,
+  });
+}

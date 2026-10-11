@@ -10,6 +10,8 @@ import {
   addBoardGuest,
   updateBoardGuestPermissions,
   removeBoardGuest,
+  getBoardInviteLink,
+  regenerateBoardInviteLink,
 } from "../controllers/boardController";
 
 const router: Router = Router();
@@ -29,5 +31,7 @@ router.get("/boards/:boardId/guests", listBoardGuests);
 router.post("/boards/:boardId/guests", addBoardGuest);
 router.patch("/boards/:boardId/guests/:userId", updateBoardGuestPermissions);
 router.delete("/boards/:boardId/guests/:userId", removeBoardGuest);
+router.get("/boards/:boardId/invite-link", getBoardInviteLink);
+router.post("/boards/:boardId/invite-link/regenerate", regenerateBoardInviteLink);
 
 export default router;

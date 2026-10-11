@@ -16,6 +16,7 @@ import listRoutes from "./routes/listRoutes";
 import cardRoutes from "./routes/cardRoutes";
 import commentRoutes from "./routes/commentRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
+import invitationRoutes from "./routes/invitationRoutes";
 
 const PORT = process.env.PORT || 4000;
 const WEB_ORIGIN = process.env.WEB_ORIGIN || "http://localhost:3000";
@@ -41,6 +42,7 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 // front of this service is what would add an /api prefix if needed later,
 // keeping this service's own routing simple.
 app.use(authRoutes);
+app.use(invitationRoutes);
 app.use(workspaceRoutes);
 app.use(boardRoutes);
 app.use(listRoutes);
@@ -219,7 +221,8 @@ async function socketCanAccessBoard(userId: string | undefined, boardId: string)
   try {
     const board = await BoardModel.findById(boardId);
     if (!board) return false;
-    return socketIsWorkspaceMember(userId, board.workspaceId.toString());
+    if (await socketIsWorkspaceMember(userId, board.workspaceId.toString())) return true;
+    return board.guestPermissions.some((guest) => guest.userId.toString() === userId);
   } catch {
     return false;
   }

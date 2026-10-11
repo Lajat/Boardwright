@@ -257,7 +257,7 @@ export function MembersModal({
                 </button>
               </div>
               <p className="mt-1.5 text-xs text-slate-400">
-                Anyone with this link and a fluxboard account can join instantly.{" "}
+                Anyone with this link can review the workspace invitation before joining.{" "}
                 <button
                   onClick={() => setConfirmingRegenerate(true)}
                   className="font-medium text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
@@ -303,7 +303,7 @@ export function MembersModal({
               {touched && validationError && <p className="text-xs text-red-600">{validationError}</p>}
               {inviteError && <p className="text-xs text-red-600">{inviteError}</p>}
               <p className="mt-0.5 text-xs text-slate-400">
-                They need an existing fluxboard account with this email.
+                They need an existing fluxboard account and must accept the invitation first.
               </p>
             </form>
           </div>

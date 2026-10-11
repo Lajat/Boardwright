@@ -9,7 +9,9 @@ import { CardModel } from "../models/Card";
 import type { Workspace, WorkspaceMember, WorkspaceMemberPreview } from "@fluxboard/shared-types";
 import { SocketEvents } from "@fluxboard/shared-types";
 import { getMemberPermissions } from "../lib/permissions";
-import { notifyUser } from "../lib/notify";
+import { createNotification, emitNotification, notificationResponse, notifyUser } from "../lib/notify";
+import { InvitationModel } from "../models/Invitation";
+import { NotificationModel } from "../models/Notification";
 
 /** Converts a Mongoose WorkspaceDocument into the shared `Workspace` shape sent to the frontend. */
 function toWorkspaceResponse(doc: any, memberPreview?: WorkspaceMemberPreview[]): Workspace {
@@ -73,12 +75,41 @@ export async function createWorkspace(req: Request, res: Response) {
  * they own, since ownerId is always mirrored into memberIds on creation).
  */
 export async function listMyWorkspaces(req: Request, res: Response) {
-  const workspaces = await WorkspaceModel.find({ memberIds: req.userId });
+  const [workspaces, guestBoards] = await Promise.all([
+    WorkspaceModel.find({ memberIds: req.userId }),
+    BoardModel.find({ "guestPermissions.userId": req.userId }).select("workspaceId"),
+  ]);
+  const memberWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+  const guestWorkspaceIds = [...new Set(
+    guestBoards
+      .map((board) => board.workspaceId.toString())
+      .filter((workspaceId) => !memberWorkspaceIds.has(workspaceId))
+  )];
+  const guestWorkspaces = guestWorkspaceIds.length
+    ? await WorkspaceModel.find({ _id: { $in: guestWorkspaceIds } })
+    : [];
+  const allWorkspaces = [...workspaces, ...guestWorkspaces];
   const memberIds = [...new Set(workspaces.flatMap((workspace) => workspace.memberIds.map((id) => id.toString())))];
   const users = await UserModel.find({ _id: { $in: memberIds } }).select("_id displayName avatarUrl");
   const membersById = new Map(users.map((user) => [user._id.toString(), toMemberPreview(user)]));
   res.json({
-    items: workspaces.map((workspace) => {
+    items: allWorkspaces.map((workspace) => {
+      if (!memberWorkspaceIds.has(workspace.id)) {
+        return {
+          ...toWorkspaceResponse({
+            ...workspace.toObject(),
+            memberIds: [],
+            ownerId: "",
+          }),
+          isBoardGuest: true,
+          myPermissions: {
+            canAdd: false, canEdit: false, canDelete: false,
+            canEditWorkspace: false,
+            canAddBoards: false, canEditBoards: false, canDeleteBoards: false,
+            canAddCards: false, canEditCards: false, canDeleteCards: false,
+          },
+        };
+      }
       const memberPreview = workspace.memberIds
         .map((id) => membersById.get(id.toString()))
         .filter((member): member is WorkspaceMemberPreview => member !== undefined)
@@ -113,6 +144,22 @@ export async function getWorkspace(req: Request, res: Response) {
 
   const isMember = workspace.memberIds.some((id) => id.toString() === req.userId);
   if (!isMember) {
+    const guestBoard = await BoardModel.exists({
+      workspaceId,
+      guestPermissions: { $elemMatch: { userId: req.userId } },
+    });
+    if (guestBoard) {
+      return res.json({
+        ...toWorkspaceResponse({ ...workspace.toObject(), memberIds: [], ownerId: "" }),
+        isBoardGuest: true,
+        myPermissions: {
+          canAdd: false, canEdit: false, canDelete: false,
+          canEditWorkspace: false,
+          canAddBoards: false, canEditBoards: false, canDeleteBoards: false,
+          canAddCards: false, canEditCards: false, canDeleteCards: false,
+        },
+      });
+    }
     // 404, not 403 — confirming a workspace exists to a non-member is its
     // own small information leak (reveals the id is valid/in-use).
     return res.status(404).json({ error: "workspace not found" });
@@ -279,9 +326,9 @@ export async function listMembers(req: Request, res: Response) {
 
 /**
  * POST /workspaces/:workspaceId/members
- * Adds an existing user (by email) to the workspace. Only the owner can
- * add members — a deliberately simple permission model for now; role-based
- * access (admin/member) was explicitly scoped out as a stretch goal.
+ * Sends an existing user a workspace invitation. Membership is granted
+ * only after they accept, so opening a notification or shared link never
+ * silently exposes every board in the workspace.
  */
 export async function addMember(req: Request, res: Response) {
   const { workspaceId } = req.params;
@@ -313,47 +360,37 @@ export async function addMember(req: Request, res: Response) {
     return res.status(409).json({ error: "that person is already a member of this workspace" });
   }
 
-  workspace.memberIds.push(userToAdd._id);
-  await workspace.save();
-
-  const member = toMemberResponse(userToAdd, workspace);
   const io = req.app.get("io");
-  // Tell everyone already looking at this workspace that a new member
-  // joined (updates their avatar stack live)...
-  io.to(`workspace:${workspaceId}`).emit(SocketEvents.MEMBER_ADDED, { workspaceId, member });
-  // ...and separately tell the NEW member themselves, in case they
-  // already have the app open elsewhere — their /workspaces list should
-  // pick up this workspace without needing a manual refresh.
-  const users = await UserModel.find({ _id: { $in: workspace.memberIds } }).select("_id displayName avatarUrl");
-  const memberPreview = users
-    .map(toMemberPreview)
-    .sort((a, b) =>
-      a.id === workspace.ownerId.toString()
-        ? -1
-        : b.id === workspace.ownerId.toString()
-          ? 1
-          : a.displayName.localeCompare(b.displayName)
-    );
-  io.to(`user:${userToAdd._id}`).emit(SocketEvents.MEMBER_ADDED, {
-    workspaceId,
-    member,
-    workspace: {
-      ...toWorkspaceResponse(workspace, memberPreview),
-      myPermissions: getMemberPermissions(workspace, userToAdd._id.toString())!,
-    },
+  const hasPendingInvitation = await InvitationModel.exists({
+    scope: "workspace",
+    targetId: workspace._id,
+    recipientId: userToAdd._id,
+    status: { $in: ["pending", "snoozed"] },
   });
+  if (hasPendingInvitation) {
+    return res.status(409).json({ error: "that person already has a pending invitation" });
+  }
 
-  // Persisted notification (bell icon), on top of the live-state-update
-  // event above — that event only helps if the invitee already has the
-  // app open; this is what they see the next time they log in if not.
-  await notifyUser(io, userToAdd._id.toString(), {
+  const invitation = await InvitationModel.create({
+    token: crypto.randomBytes(24).toString("hex"),
+    scope: "workspace",
+    targetId: workspace._id,
+    inviterId: req.userId,
+    recipientId: userToAdd._id,
+  });
+  const notification = await createNotification(userToAdd._id.toString(), {
     type: "workspace_invite",
-    title: "You were added to a workspace",
-    body: `You now have access to "${workspace.name}".`,
-    link: `/workspaces/${workspaceId}`,
+    title: "Workspace invitation",
+    body: `You were invited to join "${workspace.name}".`,
+    link: `/invite/${invitation.token}`,
   });
+  await InvitationModel.updateOne(
+    { _id: invitation._id },
+    { $set: { notificationId: new Types.ObjectId(notification.id) } }
+  );
+  emitNotification(io, userToAdd._id.toString(), notification);
 
-  res.status(201).json({ workspace: toWorkspaceResponse(workspace), member });
+  res.status(201).json({ invitationSent: true });
 }
 
 /**
@@ -403,7 +440,36 @@ export async function removeMember(req: Request, res: Response) {
   io.to(`user:${userId}`).emit(SocketEvents.ACCESS_REVOKED, {
     workspaceId,
     workspaceName: workspace.name,
+    resourceType: "workspace",
+    resourceId: workspaceId,
+    resourceName: workspace.name,
   });
+
+  await notifyUser(io, userId, {
+    type: "workspace_removed",
+    title: "Workspace access removed",
+    body: `You no longer have access to "${workspace.name}".`,
+    link: "/workspaces",
+  });
+  const pendingInvitations = await InvitationModel.find(
+    { scope: "workspace", targetId: workspace._id, recipientId: userId, status: { $in: ["pending", "snoozed"] } },
+    { notificationId: 1 }
+  );
+  await InvitationModel.updateMany(
+    { _id: { $in: pendingInvitations.map((invitation) => invitation._id) } },
+    { status: "revoked" }
+  );
+  for (const invitation of pendingInvitations) {
+    if (!invitation.notificationId) continue;
+    const notification = await NotificationModel.findByIdAndUpdate(
+      invitation.notificationId,
+      { isResolved: true, snoozedUntil: null },
+      { new: true }
+    );
+    if (notification) {
+      io.to(`user:${userId}`).emit(SocketEvents.NOTIFICATION_UPDATED, notificationResponse(notification));
+    }
+  }
 
   res.json({ removed: userId });
 }

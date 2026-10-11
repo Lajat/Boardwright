@@ -47,3 +47,20 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
+
+/** Attaches a valid signed-in identity when present, without blocking public invite previews. */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  const token = req.cookies?.accessToken;
+  if (token) {
+    try {
+      const secret = process.env.JWT_ACCESS_SECRET;
+      if (secret) {
+        const decoded = jwt.verify(token, secret) as { userId: string };
+        req.userId = decoded.userId;
+      }
+    } catch {
+      // An invalid or expired cookie is equivalent to an anonymous preview.
+    }
+  }
+  next();
+}

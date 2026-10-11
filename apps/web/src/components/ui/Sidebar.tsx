@@ -111,6 +111,16 @@ export function Sidebar() {
     }
 
     function handleAccessRevoked(payload: AccessRevokedPayload) {
+      if (payload.resourceType === "board") {
+        setBoardsByWorkspace((prev) => ({
+          ...prev,
+          [payload.workspaceId]: (prev[payload.workspaceId] ?? []).filter(
+            (board) => board.id !== payload.resourceId
+          ),
+        }));
+        void refreshWorkspaceAccess(payload.workspaceId);
+        return;
+      }
       deletedWorkspaceIds.current.add(payload.workspaceId);
       setWorkspaces((prev) => prev.filter((ws) => ws.id !== payload.workspaceId));
       setBoardsByWorkspace((prev) => {
@@ -118,6 +128,39 @@ export function Sidebar() {
         delete next[payload.workspaceId];
         return next;
       });
+    }
+
+    async function refreshWorkspaceAccess(workspaceId: string) {
+      try {
+        const [workspaceResult, boardResult] = await Promise.all([
+          apiFetch<{ items: Workspace[] }>("/workspaces", { accessToken }),
+          apiFetch<{ items: Board[] }>(`/workspaces/${workspaceId}/boards`, { accessToken }),
+        ]);
+        const visibleWorkspace = workspaceResult.items.find((workspace) => workspace.id === workspaceId);
+        if (!visibleWorkspace) {
+          deletedWorkspaceIds.current.add(workspaceId);
+          setWorkspaces((previous) => previous.filter((workspace) => workspace.id !== workspaceId));
+          setBoardsByWorkspace((previous) => {
+            const next = { ...previous };
+            delete next[workspaceId];
+            return next;
+          });
+          return;
+        }
+        deletedWorkspaceIds.current.delete(workspaceId);
+        setWorkspaces((previous) => previous.some((workspace) => workspace.id === workspaceId)
+          ? previous.map((workspace) => workspace.id === workspaceId ? visibleWorkspace : workspace)
+          : [...previous, visibleWorkspace]);
+        setBoardsByWorkspace((previous) => previous[workspaceId]
+          ? { ...previous, [workspaceId]: boardResult.items }
+          : previous);
+      } catch (error) {
+        console.error("[sidebar] Could not refresh board access:", error);
+      }
+    }
+
+    function handleAccessGranted(payload: { workspaceId: string; resourceType: "board"; resourceId: string }) {
+      if (payload.resourceType === "board") void refreshWorkspaceAccess(payload.workspaceId);
     }
 
     // Neither the sidebar nor the main /workspaces grid ever joins a
@@ -226,6 +269,7 @@ export function Sidebar() {
 
     socket.on(SocketEvents.MEMBER_ADDED, handleMemberAdded);
     socket.on(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
+    socket.on(SocketEvents.ACCESS_GRANTED, handleAccessGranted);
     socket.on(SocketEvents.WORKSPACE_DELETED, handleWorkspaceDeleted);
     socket.on(SocketEvents.WORKSPACE_UPDATED, handleWorkspaceUpdated);
     socket.on(SocketEvents.BOARD_CREATED, handleBoardCreated);
@@ -235,6 +279,7 @@ export function Sidebar() {
     return () => {
       socket.off(SocketEvents.MEMBER_ADDED, handleMemberAdded);
       socket.off(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
+      socket.off(SocketEvents.ACCESS_GRANTED, handleAccessGranted);
       socket.off(SocketEvents.WORKSPACE_DELETED, handleWorkspaceDeleted);
       socket.off(SocketEvents.WORKSPACE_UPDATED, handleWorkspaceUpdated);
       socket.off(SocketEvents.BOARD_CREATED, handleBoardCreated);
