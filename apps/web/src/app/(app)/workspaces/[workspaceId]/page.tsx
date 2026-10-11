@@ -67,7 +67,11 @@ export default function WorkspaceBoardsPage() {
   const [isSubmittingBoard, setIsSubmittingBoard] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortOrder, setSortOrder] = useState<"name" | "created">("name");
+  const [sortOrder, setSortOrder] = useState<"name" | "created">(() => {
+    if (typeof window === "undefined") return "name";
+    const stored = window.localStorage.getItem(`fluxboard:workspace-sort-order:${workspaceId}`);
+    return stored === "created" ? "created" : "name";
+  });
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
     const stored = window.localStorage.getItem(`fluxboard:workspace-view-mode:${workspaceId}`);
@@ -77,8 +81,9 @@ export default function WorkspaceBoardsPage() {
 
   useEffect(() => {
     if (!workspaceId) return;
+    window.localStorage.setItem(`fluxboard:workspace-sort-order:${workspaceId}`, sortOrder);
     window.localStorage.setItem(`fluxboard:workspace-view-mode:${workspaceId}`, viewMode);
-  }, [viewMode, workspaceId]);
+  }, [sortOrder, viewMode, workspaceId]);
   const [deletingBoard, setDeletingBoard] = useState<Board | null>(null);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [inviteToken, setInviteToken] = useState<string | null>(null);

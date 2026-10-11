@@ -52,7 +52,11 @@ export default function WorkspacesPage() {
   const [isSubmittingWorkspace, setIsSubmittingWorkspace] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortOrder, setSortOrder] = useState<"name" | "created">("name");
+  const [sortOrder, setSortOrder] = useState<"name" | "created">(() => {
+    if (typeof window === "undefined") return "name";
+    const stored = window.localStorage.getItem("fluxboard:workspaces-sort-order");
+    return stored === "created" ? "created" : "name";
+  });
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
     const stored = window.localStorage.getItem("fluxboard:workspaces-view-mode");
@@ -61,8 +65,9 @@ export default function WorkspacesPage() {
   const [deletingWorkspace, setDeletingWorkspace] = useState<Workspace | null>(null);
 
   useEffect(() => {
+    window.localStorage.setItem("fluxboard:workspaces-sort-order", sortOrder);
     window.localStorage.setItem("fluxboard:workspaces-view-mode", viewMode);
-  }, [viewMode]);
+  }, [sortOrder, viewMode]);
   const deletedWorkspaceIds = useRef(new Set<string>());
   const createWorkspaceInFlight = useRef(false);
 
