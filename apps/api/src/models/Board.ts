@@ -4,8 +4,9 @@ import { Schema, model, Document, Types } from "mongoose";
  * A guest's card-level permissions on ONE specific board, for someone who
  * is NOT a member of the board's workspace at all — a "single-board
  * guest" in the same sense Trello uses the term: they can see and work
- * on exactly this board, nothing else in the workspace (not its name,
- * not its other boards, not its member list). No board-level
+ * on exactly this board, nothing else in the workspace (other boards or
+ * its member list). The parent workspace name is shown only as context.
+ * No board-level
  * permissions exist for a guest — they can never rename/delete the board
  * itself or create sibling boards, only add/edit/delete within it,
  * matching the same delete-requires-add+edit rule as workspace members.
@@ -41,6 +42,7 @@ export interface BoardDocument extends Document {
   // reuse that same number.
   cardCounter: number;
   guestPermissions: BoardGuestEntry[];
+  inviteToken?: string;
   createdAt: Date;
 }
 
@@ -64,6 +66,7 @@ const boardSchema = new Schema<BoardDocument>({
   keyPrefix: { type: String },
   cardCounter: { type: Number, default: 0 },
   guestPermissions: { type: [boardGuestSchema], default: [] },
+  inviteToken: { type: String, index: true, sparse: true },
   createdAt: { type: Date, default: Date.now },
 });
 

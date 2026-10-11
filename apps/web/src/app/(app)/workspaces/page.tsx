@@ -163,8 +163,28 @@ export default function WorkspacesPage() {
     // now-inaccessible workspace would otherwise just sit in the grid,
     // stale, until a manual refresh. This removes it from view directly.
     function handleAccessRevoked(payload: AccessRevokedPayload) {
+      if (payload.resourceType === "board") {
+        apiFetch<{ items: Workspace[] }>("/workspaces", { accessToken })
+          .then((result) => {
+            const visibleIds = new Set(result.items.map((workspace) => workspace.id));
+            if (!visibleIds.has(payload.workspaceId)) deletedWorkspaceIds.current.add(payload.workspaceId);
+            setWorkspaces(result.items);
+          })
+          .catch((err) => showToast(err instanceof ApiError ? err.message : "Could not refresh workspace access.", "error"));
+        return;
+      }
       deletedWorkspaceIds.current.add(payload.workspaceId);
       setWorkspaces((prev) => prev.filter((ws) => ws.id !== payload.workspaceId));
+    }
+
+    function handleAccessGranted(payload: { workspaceId: string; resourceType: "board" }) {
+      if (payload.resourceType !== "board") return;
+      apiFetch<{ items: Workspace[] }>("/workspaces", { accessToken })
+        .then((result) => {
+          deletedWorkspaceIds.current.delete(payload.workspaceId);
+          setWorkspaces(result.items);
+        })
+        .catch((err) => showToast(err instanceof ApiError ? err.message : "Could not refresh workspace access.", "error"));
     }
 
     function handleMemberPermissionsUpdated({ workspaceId, member }: MemberPermissionsUpdatedPayload) {
@@ -180,10 +200,12 @@ export default function WorkspacesPage() {
 
     socket.on(SocketEvents.MEMBER_ADDED, handleMemberAdded);
     socket.on(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
+    socket.on(SocketEvents.ACCESS_GRANTED, handleAccessGranted);
     socket.on(SocketEvents.MEMBER_PERMISSIONS_UPDATED, handleMemberPermissionsUpdated);
     return () => {
       socket.off(SocketEvents.MEMBER_ADDED, handleMemberAdded);
       socket.off(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
+      socket.off(SocketEvents.ACCESS_GRANTED, handleAccessGranted);
       socket.off(SocketEvents.MEMBER_PERMISSIONS_UPDATED, handleMemberPermissionsUpdated);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

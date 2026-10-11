@@ -30,6 +30,7 @@ import {
   SocketEvents,
   type WorkspaceMembershipPayload,
   type MemberPermissionsUpdatedPayload,
+  type AccessRevokedPayload,
 } from "@fluxboard/shared-types";
 
 // A small rotating set of gradients for board tile headers — purely
@@ -90,7 +91,7 @@ export default function WorkspaceBoardsPage() {
   // there for why this defaults to full access while `members` is still
   // loading rather than flashing every button as disabled.
   const myPermissions: WorkspacePermissions = user
-    ? members.find((m) => m.id === user.id)?.permissions ?? {
+    ? workspace?.myPermissions ?? members.find((m) => m.id === user.id)?.permissions ?? {
         canAdd: true,
         canEdit: true,
         canDelete: true,
@@ -137,16 +138,28 @@ export default function WorkspaceBoardsPage() {
     Promise.all([
       apiFetch<Workspace>(`/workspaces/${workspaceId}`, { accessToken }),
       apiFetch<{ items: Board[] }>(`/workspaces/${workspaceId}/boards`, { accessToken }),
-      apiFetch<{ items: WorkspaceMember[] }>(`/workspaces/${workspaceId}/members`, { accessToken }),
     ])
-      .then(([ws, boardsRes, membersRes]) => {
+      .then(async ([ws, boardsRes]) => {
         setWorkspace(ws);
         setBoards(boardsRes.items);
+        if (ws.isBoardGuest) {
+          setMembers([]);
+          return;
+        }
+        const membersRes = await apiFetch<{ items: WorkspaceMember[] }>(
+          `/workspaces/${workspaceId}/members`,
+          { accessToken }
+        );
         setMembers(membersRes.items);
       })
-      .catch((err) =>
-        showToast(err instanceof ApiError ? err.message : "Failed to load workspace", "error")
-      )
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) {
+          showToast("You no longer have access to this workspace.", "error");
+          router.replace("/workspaces");
+          return;
+        }
+        showToast(err instanceof ApiError ? err.message : "Failed to load workspace", "error");
+      })
       .finally(() => setIsLoadingBoards(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, workspaceId]);
@@ -160,9 +173,9 @@ export default function WorkspaceBoardsPage() {
   useEffect(() => {
     if (!accessToken) return;
     const socket = getSocket();
-    socket.emit("join-workspace", workspaceId);
+    if (!workspace?.isBoardGuest) socket.emit("join-workspace", workspaceId);
     function rejoinOnReconnect() {
-      socket.emit("join-workspace", workspaceId);
+      if (!workspace?.isBoardGuest) socket.emit("join-workspace", workspaceId);
     }
     socket.on("connect", rejoinOnReconnect);
 
@@ -198,6 +211,51 @@ export default function WorkspaceBoardsPage() {
       router.replace("/workspaces");
     }
 
+    function handleAccessRevoked(payload: AccessRevokedPayload) {
+      if (payload.workspaceId !== workspaceId) return;
+      if (payload.resourceType === "board") {
+        void apiFetch<{ items: Board[] }>(`/workspaces/${workspaceId}/boards`, { accessToken })
+          .then((result) => {
+            setBoards(result.items);
+            if (result.items.length === 0) {
+              showToast(`You no longer have access to "${payload.resourceName}".`, "error");
+              router.replace("/workspaces");
+            }
+          })
+          .catch(() => {
+            setBoards((previous) => previous.filter((board) => board.id !== payload.resourceId));
+            showToast(`You no longer have access to "${payload.resourceName}".`, "error");
+            router.replace("/workspaces");
+          });
+        return;
+      }
+      Promise.all([
+        apiFetch<Workspace>(`/workspaces/${workspaceId}`, { accessToken }),
+        apiFetch<{ items: Board[] }>(`/workspaces/${workspaceId}/boards`, { accessToken }),
+      ])
+        .then(([updatedWorkspace, accessibleBoards]) => {
+          setWorkspace(updatedWorkspace);
+          setBoards(accessibleBoards.items);
+          if (updatedWorkspace.isBoardGuest) {
+            setMembers([]);
+            showToast(`Workspace access changed. You still have access to shared boards.`, "error");
+          } else {
+            router.replace("/workspaces");
+          }
+        })
+        .catch(() => {
+          showToast(`You no longer have access to "${payload.resourceName}".`, "error");
+          router.replace("/workspaces");
+        });
+    }
+
+    function handleAccessGranted(payload: { workspaceId: string; resourceType: "board" }) {
+      if (payload.workspaceId !== workspaceId || payload.resourceType !== "board") return;
+      apiFetch<{ items: Board[] }>(`/workspaces/${workspaceId}/boards`, { accessToken })
+        .then((result) => setBoards(result.items))
+        .catch((err) => showToast(err instanceof ApiError ? err.message : "Could not refresh shared boards.", "error"));
+    }
+
     function handleMemberAdded({ workspaceId: wsId, member }: WorkspaceMembershipPayload) {
       if (wsId !== workspaceId) return;
       setMembers((prev) => (prev.some((m) => m.id === member.id) ? prev : [...prev, member]));
@@ -224,24 +282,28 @@ export default function WorkspaceBoardsPage() {
     socket.on(SocketEvents.BOARD_DELETED, handleBoardDeleted);
     socket.on(SocketEvents.WORKSPACE_UPDATED, handleWorkspaceUpdated);
     socket.on(SocketEvents.WORKSPACE_DELETED, handleWorkspaceDeleted);
+    socket.on(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
+    socket.on(SocketEvents.ACCESS_GRANTED, handleAccessGranted);
     socket.on(SocketEvents.MEMBER_ADDED, handleMemberAdded);
     socket.on(SocketEvents.MEMBER_REMOVED, handleMemberRemoved);
     socket.on(SocketEvents.MEMBER_PERMISSIONS_UPDATED, handleMemberPermissionsUpdated);
 
     return () => {
-      socket.emit("leave-workspace", workspaceId);
+      if (!workspace?.isBoardGuest) socket.emit("leave-workspace", workspaceId);
       socket.off("connect", rejoinOnReconnect);
       socket.off(SocketEvents.BOARD_CREATED, handleBoardCreated);
       socket.off(SocketEvents.BOARD_UPDATED, handleBoardUpdated);
       socket.off(SocketEvents.BOARD_DELETED, handleBoardDeleted);
       socket.off(SocketEvents.WORKSPACE_UPDATED, handleWorkspaceUpdated);
       socket.off(SocketEvents.WORKSPACE_DELETED, handleWorkspaceDeleted);
+      socket.off(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
+      socket.off(SocketEvents.ACCESS_GRANTED, handleAccessGranted);
       socket.off(SocketEvents.MEMBER_ADDED, handleMemberAdded);
       socket.off(SocketEvents.MEMBER_REMOVED, handleMemberRemoved);
       socket.off(SocketEvents.MEMBER_PERMISSIONS_UPDATED, handleMemberPermissionsUpdated);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, user?.id, accessToken]);
+  }, [workspaceId, user?.id, accessToken, workspace?.isBoardGuest]);
 
   async function handleCreateBoard(e: FormEvent) {
     e.preventDefault();
@@ -323,12 +385,11 @@ export default function WorkspaceBoardsPage() {
   }
 
   async function handleInviteMember(email: string) {
-    const res = await apiFetch<{ workspace: Workspace; member: WorkspaceMember }>(
+    await apiFetch<{ invitationSent: boolean }>(
       `/workspaces/${workspaceId}/members`,
       { method: "POST", accessToken, body: { email } }
     );
-    setMembers((prev) => (prev.some((m) => m.id === res.member.id) ? prev : [...prev, res.member]));
-    showToast(`${res.member.displayName} was added to the workspace`);
+    showToast("Workspace invitation sent");
   }
 
   async function handleRemoveMember(member: WorkspaceMember) {
@@ -419,8 +480,15 @@ export default function WorkspaceBoardsPage() {
               )}
             </div>
             <p className="mt-1.5 text-sm text-slate-500">
-              Browse and manage the boards in this workspace.
+              {workspace?.isBoardGuest
+                ? "You have guest access to selected boards only; workspace details and other boards are private."
+                : "Browse and manage the boards in this workspace."}
             </p>
+            {workspace?.isBoardGuest && (
+              <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
+                Board guest <span className="text-violet-400">·</span> limited access
+              </span>
+            )}
           </div>
           <div className="flex items-center justify-between gap-3 sm:justify-end">
             {myPermissions.canAddBoards && (
@@ -437,7 +505,9 @@ export default function WorkspaceBoardsPage() {
                 New board
               </button>
             )}
-            <AvatarStack members={members} onClick={() => setIsMembersModalOpen(true)} />
+            {!workspace?.isBoardGuest && (
+              <AvatarStack members={members} onClick={() => setIsMembersModalOpen(true)} />
+            )}
           </div>
         </div>
 
@@ -689,7 +759,7 @@ export default function WorkspaceBoardsPage() {
         onConfirm={handleDeleteBoard}
       />
 
-      {user && (
+      {user && workspace && !workspace.isBoardGuest && (
         <MembersModal
           open={isMembersModalOpen}
           onClose={() => setIsMembersModalOpen(false)}

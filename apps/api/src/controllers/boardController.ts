@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { Types } from "mongoose";
 import { BoardModel } from "../models/Board";
 import { WorkspaceModel } from "../models/Workspace";
 import { ListModel } from "../models/List";
@@ -8,7 +9,10 @@ import type { Board } from "@fluxboard/shared-types";
 import { SocketEvents } from "@fluxboard/shared-types";
 import { getMemberPermissions, isWorkspaceMember, resolveBoardAccess } from "../lib/permissions";
 import { generateKeyPrefix } from "../lib/taskId";
-import { notifyUser } from "../lib/notify";
+import { createNotification, emitNotification, notificationResponse, notifyUser } from "../lib/notify";
+import { InvitationModel } from "../models/Invitation";
+import { NotificationModel } from "../models/Notification";
+import crypto from "crypto";
 
 /** Converts a Mongoose BoardDocument into the shared `Board` shape. */
 function toBoardResponse(doc: any): Board {
@@ -73,11 +77,19 @@ export async function listBoardsForWorkspace(req: Request, res: Response) {
   const { workspaceId } = req.params;
 
   const workspace = await WorkspaceModel.findById(workspaceId);
-  if (!workspace || !isWorkspaceMember(workspace, req.userId!)) {
+  if (!workspace) {
     return res.status(404).json({ error: "workspace not found" });
   }
 
-  const boards = await BoardModel.find({ workspaceId });
+  const isMember = isWorkspaceMember(workspace, req.userId!);
+  const boards = await BoardModel.find(
+    isMember
+      ? { workspaceId }
+      : { workspaceId, guestPermissions: { $elemMatch: { userId: req.userId } } }
+  );
+  if (!isMember && boards.length === 0) {
+    return res.status(404).json({ error: "workspace not found" });
+  }
   res.json({ items: boards.map(toBoardResponse) });
 }
 
@@ -145,6 +157,7 @@ export async function updateBoard(req: Request, res: Response) {
     .get("io")
     .to(`workspace:${board.workspaceId}`)
     .emit(SocketEvents.BOARD_UPDATED, boardResponse);
+  req.app.get("io").to(`board:${boardId}`).emit(SocketEvents.BOARD_UPDATED, boardResponse);
 
   res.json(boardResponse);
 }
@@ -174,6 +187,7 @@ export async function deleteBoard(req: Request, res: Response) {
 
   const lists = await ListModel.find({ boardId });
   const listIds = lists.map((l) => l._id);
+  const boardGuests = [...board.guestPermissions];
 
   // Cascade delete, innermost first: cards → lists → board. Doing it in
   // this order means if this fails partway through, we're left with
@@ -188,6 +202,47 @@ export async function deleteBoard(req: Request, res: Response) {
     .get("io")
     .to(`workspace:${board.workspaceId}`)
     .emit(SocketEvents.BOARD_DELETED, boardResponse);
+
+  const io = req.app.get("io");
+  for (const guest of boardGuests) {
+    const guestId = guest.userId.toString();
+    io.to(`user:${guestId}`).emit(SocketEvents.ACCESS_REVOKED, {
+      workspaceId: board.workspaceId.toString(),
+      workspaceName: access.workspace.name,
+      resourceType: "board",
+      resourceId: board.id,
+      resourceName: board.title,
+    });
+    await notifyUser(io, guestId, {
+      type: "board_removed",
+      title: "Board access removed",
+      body: `"${board.title}" was deleted, so you no longer have access to it.`,
+      link: "/workspaces",
+    });
+  }
+  const pendingInvitations = await InvitationModel.find({
+    scope: "board",
+    targetId: board._id,
+    status: { $in: ["pending", "snoozed"] },
+  });
+  await InvitationModel.updateMany(
+    { _id: { $in: pendingInvitations.map((invitation) => invitation._id) } },
+    { status: "revoked" }
+  );
+  for (const invitation of pendingInvitations) {
+    if (!invitation.notificationId) continue;
+    const notification = await NotificationModel.findByIdAndUpdate(
+      invitation.notificationId,
+      { isResolved: true, snoozedUntil: null },
+      { new: true }
+    );
+    if (notification) {
+      io.to(`user:${invitation.recipientId}`).emit(
+        SocketEvents.NOTIFICATION_UPDATED,
+        notificationResponse(notification)
+      );
+    }
+  }
 
   res.json({ deleted: boardResponse });
 }
@@ -289,23 +344,42 @@ export async function addBoardGuest(req: Request, res: Response) {
     return res.status(400).json({ error: "this person is already a workspace member, which already includes access to this board" });
   }
 
-  const existingIndex = board.guestPermissions.findIndex((g) => g.userId.toString() === userToAdd._id.toString());
-  const entry = { userId: userToAdd._id, canAddCards: !!canAdd, canEditCards: !!canEdit, canDeleteCards: !!canDelete };
-  if (existingIndex >= 0) {
-    board.guestPermissions[existingIndex] = entry;
-  } else {
-    board.guestPermissions.push(entry);
+  if (board.guestPermissions.some((guest) => guest.userId.toString() === userToAdd._id.toString())) {
+    return res.status(409).json({ error: "that person already has access to this board" });
   }
-  await board.save();
-
-  await notifyUser(req.app.get("io"), userToAdd._id.toString(), {
-    type: "workspace_invite",
-    title: "You were given access to a board",
-    body: `You now have access to "${board.title}".`,
-    link: `/boards/${boardId}`,
+  const hasPendingInvitation = await InvitationModel.exists({
+    scope: "board",
+    targetId: board._id,
+    recipientId: userToAdd._id,
+    status: { $in: ["pending", "snoozed"] },
   });
+  if (hasPendingInvitation) {
+    return res.status(409).json({ error: "that person already has a pending invitation" });
+  }
 
-  res.status(201).json(toBoardGuestResponse(userToAdd, entry));
+  const invitation = await InvitationModel.create({
+    token: crypto.randomBytes(24).toString("hex"),
+    scope: "board",
+    targetId: board._id,
+    inviterId: req.userId,
+    recipientId: userToAdd._id,
+    canAddCards: !!canAdd,
+    canEditCards: !!canEdit,
+    canDeleteCards: !!canDelete,
+  });
+  const notification = await createNotification(userToAdd._id.toString(), {
+    type: "board_invite",
+    title: "Board invitation",
+    body: `You were invited to "${board.title}" in "${workspace.name}".`,
+    link: `/invite/${invitation.token}`,
+  });
+  await InvitationModel.updateOne(
+    { _id: invitation._id },
+    { $set: { notificationId: new Types.ObjectId(notification.id) } }
+  );
+  emitNotification(req.app.get("io"), userToAdd._id.toString(), notification);
+
+  res.status(201).json({ invitationSent: true });
 }
 
 /**
@@ -364,6 +438,10 @@ export async function removeBoardGuest(req: Request, res: Response) {
     return res.status(403).json({ error: "only the workspace owner can remove a guest" });
   }
 
+  const wasGuest = board.guestPermissions.some((guest) => guest.userId.toString() === userId);
+  if (!wasGuest) {
+    return res.status(404).json({ error: "that person is not a guest on this board" });
+  }
   board.guestPermissions = board.guestPermissions.filter((g) => g.userId.toString() !== userId);
   await board.save();
 
@@ -372,8 +450,49 @@ export async function removeBoardGuest(req: Request, res: Response) {
   // board rather than finding out only when their next request 404s.
   req.app.get("io").to(`user:${userId}`).emit(SocketEvents.ACCESS_REVOKED, {
     workspaceId: board.workspaceId.toString(),
-    workspaceName: board.title, // a guest never knew the workspace's name in the first place — this is the closest equivalent they'll recognize
+    workspaceName: workspace.name,
+    resourceType: "board",
+    resourceId: boardId,
+    resourceName: board.title,
+  });
+  await notifyUser(req.app.get("io"), userId, {
+    type: "board_removed",
+    title: "Board access removed",
+    body: `You no longer have access to "${board.title}".`,
+    link: "/workspaces",
   });
 
   res.json({ removed: userId });
+}
+
+/** GET /boards/:boardId/invite-link — owner-only share link for one board. */
+export async function getBoardInviteLink(req: Request, res: Response) {
+  const { boardId } = req.params;
+  const board = await BoardModel.findById(boardId);
+  if (!board) return res.status(404).json({ error: "board not found" });
+  const workspace = await WorkspaceModel.findById(board.workspaceId);
+  if (!workspace) return res.status(404).json({ error: "board not found" });
+  if (workspace.ownerId.toString() !== req.userId) {
+    return res.status(403).json({ error: "only the workspace owner can view the board invite link" });
+  }
+  if (!board.inviteToken) {
+    board.inviteToken = crypto.randomBytes(24).toString("hex");
+    await board.save();
+  }
+  res.json({ token: board.inviteToken });
+}
+
+/** POST /boards/:boardId/invite-link/regenerate — invalidates the old board link. */
+export async function regenerateBoardInviteLink(req: Request, res: Response) {
+  const { boardId } = req.params;
+  const board = await BoardModel.findById(boardId);
+  if (!board) return res.status(404).json({ error: "board not found" });
+  const workspace = await WorkspaceModel.findById(board.workspaceId);
+  if (!workspace) return res.status(404).json({ error: "board not found" });
+  if (workspace.ownerId.toString() !== req.userId) {
+    return res.status(403).json({ error: "only the workspace owner can regenerate the board invite link" });
+  }
+  board.inviteToken = crypto.randomBytes(24).toString("hex");
+  await board.save();
+  res.json({ token: board.inviteToken });
 }

@@ -4,9 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/apiClient";
 import { disconnectSocket, getSocket } from "@/lib/socket";
-import { useToast } from "@/components/ui/Toast";
 import type { User } from "@fluxboard/shared-types";
-import { SocketEvents, type AccessRevokedPayload } from "@fluxboard/shared-types";
 import { getPostAuthRedirect } from "@/lib/authRedirect";
 
 interface AuthContextValue {
@@ -31,7 +29,6 @@ const SESSION_FLAG = "authenticated"; // sentinel value — see the accessToken 
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { showToast } = useToast();
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,30 +59,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (accessToken) getSocket();
   }, [accessToken]);
-
-  // The one truly global real-time listener in the app: no matter which
-  // page someone is on — the workspaces grid, a specific workspace, or
-  // deep inside a board — if the owner removes them from a workspace,
-  // this fires immediately. Redirecting unconditionally to /workspaces is
-  // deliberately simple: it's always a safe landing spot, and figuring
-  // out "was the page they were on actually inside the affected
-  // workspace" isn't worth the complexity for what's fundamentally a rare
-  // event.
-  useEffect(() => {
-    if (!user) return;
-    const socket = getSocket();
-
-    function handleAccessRevoked(payload: AccessRevokedPayload) {
-      showToast(`You were removed from "${payload.workspaceName}"`, "error");
-      router.replace("/workspaces");
-    }
-
-    socket.on(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
-    return () => {
-      socket.off(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
 
   async function login(email: string, password: string) {
     // The response body only contains the user profile now — both tokens

@@ -28,7 +28,7 @@ import { CardDetailModal, type CardUpdates } from "@/components/CardDetailModal"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EditableTitle } from "@/components/ui/EditableTitle";
 import { AvatarStack } from "@/components/ui/AvatarStack";
-import { MembersModal } from "@/components/MembersModal";
+import { BoardMembersModal } from "@/components/BoardMembersModal";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -48,13 +48,14 @@ import {
   type Priority,
   type Workspace,
   type WorkspaceMember,
-  type WorkspacePermissions,
+  type BoardGuest,
 } from "@fluxboard/shared-types";
 import {
   SocketEvents,
   type CardMovedPayload,
   type WorkspaceMembershipPayload,
   type MemberPermissionsUpdatedPayload,
+  type AccessRevokedPayload,
 } from "@fluxboard/shared-types";
 
 /**
@@ -122,6 +123,7 @@ export default function BoardPage() {
     if (board?.workspaceId) setActiveWorkspaceId(board.workspaceId);
   }, [board?.workspaceId, setActiveWorkspaceId]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [boardGuests, setBoardGuests] = useState<BoardGuest[]>([]);
   const [activeBoardUserIds, setActiveBoardUserIds] = useState<string[]>([]);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [cardSearch, setCardSearch] = useState("");
@@ -146,7 +148,11 @@ export default function BoardPage() {
   // (see apps/api/src/lib/permissions.ts), so this is purely a UX default
   // to avoid a flash of disabled buttons before the fetch resolves.
   const myPermissions = user
-    ? members.find((m) => m.id === user.id)?.permissions ?? { canAdd: true, canEdit: true, canDelete: true }
+    ? board?.myPermissions ?? members.find((m) => m.id === user.id)?.permissions ?? {
+        canAdd: false,
+        canEdit: false,
+        canDelete: false,
+      }
     : { canAdd: false, canEdit: false, canDelete: false };
   // Shown once per board, on mobile only, the first time there's more
   // than fits on screen — the edge fade is a subtle enough cue that a
@@ -293,22 +299,27 @@ export default function BoardPage() {
   // workspace boards-list page).
   useEffect(() => {
     if (!accessToken || !board?.workspaceId) return;
-    Promise.all([
-      apiFetch<Workspace>(`/workspaces/${board.workspaceId}`, { accessToken }),
-      apiFetch<{ items: WorkspaceMember[] }>(`/workspaces/${board.workspaceId}/members`, {
-        accessToken,
-      }),
-    ])
-      .then(([ws, membersRes]) => {
+    apiFetch<Workspace>(`/workspaces/${board.workspaceId}`, { accessToken })
+      .then(async (ws) => {
         setWorkspace(ws);
+        if (ws.isBoardGuest) {
+          setMembers([]);
+          setBoardGuests([]);
+          return;
+        }
+        const [membersRes, guestsRes] = await Promise.all([
+          apiFetch<{ items: WorkspaceMember[] }>(`/workspaces/${board.workspaceId}/members`, { accessToken }),
+          apiFetch<{ items: BoardGuest[] }>(`/boards/${boardId}/guests`, { accessToken }),
+        ]);
         setMembers(membersRes.items);
+        setBoardGuests(guestsRes.items);
       })
-      .catch(() => {
-        // Non-critical for this page — the board itself still works fine
-        // without the avatar stack, so fail silently rather than
-        // interrupting the board with a toast for a secondary feature.
+      .catch((err) => {
+        if (err instanceof ApiError && err.status !== 404) {
+          showToast(err.message, "error");
+        }
       });
-  }, [accessToken, board?.workspaceId]);
+  }, [accessToken, board?.workspaceId, boardId, showToast]);
 
   // Workspace-level real-time awareness: this board can disappear (this
   // exact board deleted, or its whole workspace deleted) or get renamed by
@@ -319,9 +330,9 @@ export default function BoardPage() {
     if (!board?.workspaceId || !accessToken) return;
     const socket = getSocket();
     const workspaceId = board.workspaceId;
-    socket.emit("join-workspace", workspaceId);
+    if (!workspace?.isBoardGuest) socket.emit("join-workspace", workspaceId);
     function rejoinWorkspaceOnReconnect() {
-      socket.emit("join-workspace", workspaceId);
+      if (!workspace?.isBoardGuest) socket.emit("join-workspace", workspaceId);
     }
     socket.on("connect", rejoinWorkspaceOnReconnect);
 
@@ -339,6 +350,33 @@ export default function BoardPage() {
     function handleWorkspaceDeleted(deleted: Workspace) {
       if (deleted.id !== workspaceId) return;
       showToast(`"${deleted.name}" was deleted`, "error");
+      router.replace("/workspaces");
+    }
+
+    async function handleAccessRevoked(payload: AccessRevokedPayload) {
+      if (
+        payload.resourceType === "board" && payload.resourceId !== boardId ||
+        payload.resourceType === "workspace" && payload.workspaceId !== workspaceId
+      ) return;
+      if (payload.resourceType === "workspace") {
+        try {
+          const [currentBoard, updatedWorkspace] = await Promise.all([
+            apiFetch<Board>(`/boards/${boardId}`, { accessToken }),
+            apiFetch<Workspace>(`/workspaces/${workspaceId}`, { accessToken }),
+          ]);
+          setBoard(currentBoard);
+          setWorkspace(updatedWorkspace);
+          if (updatedWorkspace.isBoardGuest) {
+            setMembers([]);
+            showToast(`Workspace access changed. This board is still shared with you.`);
+            return;
+          }
+        } catch {
+          // The access check below is authoritative; a revoked board is
+          // sent to the safe workspace list rather than left on screen.
+        }
+      }
+      showToast(`You no longer have access to "${payload.resourceName}".`, "error");
       router.replace("/workspaces");
     }
 
@@ -366,22 +404,24 @@ export default function BoardPage() {
     socket.on(SocketEvents.BOARD_UPDATED, handleBoardUpdated);
     socket.on(SocketEvents.BOARD_DELETED, handleBoardDeleted);
     socket.on(SocketEvents.WORKSPACE_DELETED, handleWorkspaceDeleted);
+    socket.on(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
     socket.on(SocketEvents.MEMBER_ADDED, handleMemberAdded);
     socket.on(SocketEvents.MEMBER_REMOVED, handleMemberRemoved);
     socket.on(SocketEvents.MEMBER_PERMISSIONS_UPDATED, handleMemberPermissionsUpdated);
 
     return () => {
-      socket.emit("leave-workspace", workspaceId);
+      if (!workspace?.isBoardGuest) socket.emit("leave-workspace", workspaceId);
       socket.off("connect", rejoinWorkspaceOnReconnect);
       socket.off(SocketEvents.BOARD_UPDATED, handleBoardUpdated);
       socket.off(SocketEvents.BOARD_DELETED, handleBoardDeleted);
       socket.off(SocketEvents.WORKSPACE_DELETED, handleWorkspaceDeleted);
+      socket.off(SocketEvents.ACCESS_REVOKED, handleAccessRevoked);
       socket.off(SocketEvents.MEMBER_ADDED, handleMemberAdded);
       socket.off(SocketEvents.MEMBER_REMOVED, handleMemberRemoved);
       socket.off(SocketEvents.MEMBER_PERMISSIONS_UPDATED, handleMemberPermissionsUpdated);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board?.workspaceId, boardId, accessToken]);
+  }, [board?.workspaceId, boardId, accessToken, workspace?.isBoardGuest]);
 
   // Real-time sync: join this board's room and apply events from OTHER
   // clients (and, harmlessly, our own — every handler below is written to
@@ -515,6 +555,11 @@ export default function BoardPage() {
       setCardsById(nextCardsById);
       setLists(listsWithCards);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        showToast("This board is no longer available to you.", "error");
+        router.replace("/workspaces");
+        return;
+      }
       showToast(err instanceof ApiError ? err.message : "Failed to load board", "error");
     } finally {
       setIsLoadingBoard(false);
@@ -546,40 +591,24 @@ export default function BoardPage() {
     }
   }
 
-  async function handleInviteMember(email: string) {
-    if (!board) return;
-    const res = await apiFetch<{ workspace: Workspace; member: WorkspaceMember }>(
-      `/workspaces/${board.workspaceId}/members`,
+  async function handleInviteGuest(email: string) {
+    await apiFetch<{ invitationSent: boolean }>(
+      `/boards/${boardId}/guests`,
       { method: "POST", accessToken, body: { email } }
     );
-    setMembers((prev) => (prev.some((m) => m.id === res.member.id) ? prev : [...prev, res.member]));
-    showToast(`${res.member.displayName} was added to the workspace`);
+    showToast("Board invitation sent");
   }
 
-  async function handleRemoveMember(member: WorkspaceMember) {
-    if (!board) return;
+  async function handleRemoveGuest(guest: BoardGuest) {
     try {
-      await apiFetch(`/workspaces/${board.workspaceId}/members/${member.id}`, {
+      await apiFetch(`/boards/${boardId}/guests/${guest.id}`, {
         method: "DELETE",
         accessToken,
       });
-      setMembers((prev) => prev.filter((m) => m.id !== member.id));
-      showToast(`${member.displayName} was removed from the workspace`);
+      setBoardGuests((prev) => prev.filter((entry) => entry.id !== guest.id));
+      showToast(`${guest.displayName} was removed from the board`);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to remove member", "error");
-    }
-  }
-
-  async function handleUpdateMemberPermissions(member: WorkspaceMember, updates: Partial<WorkspacePermissions>) {
-    if (!board) return;
-    try {
-      const res = await apiFetch<{ member: WorkspaceMember }>(
-        `/workspaces/${board.workspaceId}/members/${member.id}/permissions`,
-        { method: "PATCH", accessToken, body: updates }
-      );
-      setMembers((prev) => prev.map((m) => (m.id === res.member.id ? res.member : m)));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Failed to update permissions", "error");
+      showToast(err instanceof ApiError ? err.message : "Failed to remove board guest", "error");
     }
   }
 
@@ -587,23 +616,22 @@ export default function BoardPage() {
   // members modal — see the identical pattern (and full reasoning) on the
   // workspace boards-list page.
   useEffect(() => {
-    if (!isMembersModalOpen || !isOwner || inviteToken || !accessToken || !board?.workspaceId) return;
+    if (!isMembersModalOpen || !isOwner || inviteToken || !accessToken) return;
     setIsLoadingInviteLink(true);
-    apiFetch<{ token: string }>(`/workspaces/${board.workspaceId}/invite-link`, { accessToken })
+    apiFetch<{ token: string }>(`/boards/${boardId}/invite-link`, { accessToken })
       .then((res) => setInviteToken(res.token))
       .catch((err) => showToast(err instanceof ApiError ? err.message : "Failed to load invite link", "error"))
       .finally(() => setIsLoadingInviteLink(false));
-  }, [isMembersModalOpen, isOwner, inviteToken, accessToken, board?.workspaceId, showToast]);
+  }, [isMembersModalOpen, isOwner, inviteToken, accessToken, boardId, showToast]);
 
   async function handleRegenerateInviteLink() {
-    if (!board) return;
     try {
       const res = await apiFetch<{ token: string }>(
-        `/workspaces/${board.workspaceId}/invite-link/regenerate`,
+        `/boards/${boardId}/invite-link/regenerate`,
         { method: "POST", accessToken }
       );
       setInviteToken(res.token);
-      showToast("Invite link regenerated");
+      showToast("Board invite link rotated");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Failed to regenerate invite link", "error");
     }
@@ -1360,18 +1388,17 @@ export default function BoardPage() {
         onConfirm={handleDeleteBoard}
       />
 
-      {user && workspace && (
-        <MembersModal
+      {user && workspace && !workspace.isBoardGuest && (
+        <BoardMembersModal
           open={isMembersModalOpen}
           onClose={() => setIsMembersModalOpen(false)}
           workspaceName={workspace.name}
-          members={members}
-          activeMemberIds={activeBoardUserIds}
+          boardName={board?.title ?? "Board"}
+          guests={boardGuests}
+          activeGuestIds={activeBoardUserIds}
           isOwner={isOwner}
-          currentUserId={user.id}
-          onInvite={handleInviteMember}
-          onRemove={handleRemoveMember}
-          onUpdatePermissions={handleUpdateMemberPermissions}
+          onInvite={handleInviteGuest}
+          onRemove={handleRemoveGuest}
           inviteLink={
             inviteToken && typeof window !== "undefined"
               ? `${window.location.origin}/invite/${inviteToken}`

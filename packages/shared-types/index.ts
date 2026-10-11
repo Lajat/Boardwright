@@ -37,6 +37,8 @@ export interface Workspace {
    * UI gate workspace-level actions consistently.
    */
   myPermissions?: WorkspacePermissions;
+  /** True when the caller has access to one or more boards, but not the workspace membership itself. */
+  isBoardGuest?: boolean;
 }
 
 export interface WorkspaceMemberPreview {
@@ -213,8 +215,10 @@ export const SocketEvents = {
   // Sent to the removed user's personal room so active clients can leave
   // the workspace immediately instead of waiting for a failed API request.
   ACCESS_REVOKED: "workspace:access-revoked",
+  ACCESS_GRANTED: "workspace:access-granted",
   COMMENT_ADDED: "comment:added",
   NOTIFICATION_CREATED: "notification:created",
+  NOTIFICATION_UPDATED: "notification:updated",
   BOARD_PRESENCE_UPDATED: "board:presence-updated",
 } as const;
 
@@ -255,6 +259,9 @@ export interface MemberPermissionsUpdatedPayload {
 export interface AccessRevokedPayload {
   workspaceId: string;
   workspaceName: string;
+  resourceType: "workspace" | "board";
+  resourceId: string;
+  resourceName: string;
 }
 
 /**
@@ -264,12 +271,34 @@ export interface AccessRevokedPayload {
  * navigate to; `type` exists mainly for future icon/grouping purposes,
  * not for any logic that currently branches on it.
  */
+export type NotificationType =
+  | "workspace_invite"
+  | "board_invite"
+  | "workspace_removed"
+  | "board_removed"
+  | "invitation_response";
+
 export interface Notification {
   id: string;
-  type: "workspace_invite";
+  type: NotificationType;
   title: string;
   body: string;
   link: string;
   isRead: boolean;
+  isResolved?: boolean;
+  snoozedUntil?: string;
   createdAt: string;
+}
+
+export interface InvitePreview {
+  token: string;
+  scope: "workspace" | "board";
+  workspaceName: string;
+  boardName?: string;
+  resourceLink: string;
+  inviterName: string;
+  status: "pending" | "snoozed" | "accepted" | "declined" | "closed" | "already_has_access";
+  snoozedUntil?: string;
+  isDirectInvite: boolean;
+  permissions?: CardPermissions;
 }

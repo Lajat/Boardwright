@@ -1,13 +1,16 @@
 import { Schema, model, Document, Types } from "mongoose";
+import type { NotificationType } from "@fluxboard/shared-types";
 
 /** Mongoose document shape for a persisted notification. */
 export interface NotificationDocument extends Document {
   userId: Types.ObjectId; // recipient
-  type: "workspace_invite";
+  type: NotificationType;
   title: string;
   body: string;
   link: string;
   isRead: boolean;
+  isResolved: boolean;
+  snoozedUntil?: Date;
   createdAt: Date;
 }
 
@@ -18,6 +21,8 @@ const notificationSchema = new Schema<NotificationDocument>({
   body: { type: String, required: true },
   link: { type: String, required: true },
   isRead: { type: Boolean, default: false },
+  isResolved: { type: Boolean, default: false },
+  snoozedUntil: { type: Date },
   createdAt: { type: Date, default: Date.now },
 });
 
