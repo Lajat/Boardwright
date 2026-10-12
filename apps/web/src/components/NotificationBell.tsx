@@ -423,19 +423,30 @@ export function NotificationBell() {
                           {isExpanded && (
                             <ul className="space-y-1 bg-slate-50/60 px-4 py-3">
                               {items.map((item) => (
-                                <li key={item.id}>
+                                <li key={item.id} className="group/row flex items-center gap-1">
                                   <button type="button" onClick={() => openNotification(item)}
-                                    className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-white">
+                                    className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left transition hover:bg-white">
                                     <span className="block text-xs font-semibold text-slate-800">{item.body}</span>
                                     <span className="mt-1 block text-[10px] text-slate-400">{relativeTime(item.createdAt)}</span>
                                   </button>
+                                  {!item.isRead && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void markRead(item)}
+                                      title="Mark as read"
+                                      aria-label="Mark as read, without opening this notification"
+                                      className="shrink-0 rounded-full p-1.5 text-slate-300 opacity-100 transition hover:bg-brand-50 hover:text-brand-700 sm:opacity-0 sm:group-hover/row:opacity-100"
+                                    >
+                                      <CheckIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
                                 </li>
                               ))}
                             </ul>
                           )}
                         </>
                       ) : (
-                        <div className={`flex items-start gap-3 px-4 py-4 transition ${first.isRead ? "" : "bg-brand-50/30"}`}>
+                        <div className={`group/row flex items-start gap-3 px-4 py-4 transition ${first.isRead ? "" : "bg-brand-50/30"}`}>
                           {!first.isRead && <span aria-label="Unread" className="absolute left-1.5 top-6 h-2 w-2 rounded-full bg-brand-500" />}
                           <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
                             isInvitation(first) ? "bg-brand-50 text-brand-700"
@@ -445,14 +456,33 @@ export function NotificationBell() {
                             {isInvitation(first) ? <LayoutIcon className="h-4 w-4" /> : first.type.includes("removed") ? <XIcon className="h-4 w-4" /> : <BellIcon className="h-4 w-4" />}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <button type="button" onClick={() => openNotification(first)} className="block w-full text-left">
-                              <span className="flex items-center gap-2">
-                                <span className="truncate text-sm font-semibold text-slate-900">{first.title}</span>
-                                {!first.isRead && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />}
-                              </span>
-                              <span className="mt-1 block text-xs leading-relaxed text-slate-600">{first.body}</span>
-                              <span className="mt-2 block text-[11px] text-slate-400">{relativeTime(first.createdAt)}</span>
-                            </button>
+                            <div className="flex items-start gap-2">
+                              {/* A SIBLING of the navigate-button below, not nested inside it — a
+                                  button-in-a-button isn't valid HTML, and nesting it would make every
+                                  click navigate regardless of which one was pressed. Reading a
+                                  notification while working on something else shouldn't force a
+                                  context switch, so this lets someone clear the unread dot without
+                                  leaving the page they're on. */}
+                              <button type="button" onClick={() => openNotification(first)} className="block min-w-0 flex-1 text-left">
+                                <span className="flex items-center gap-2">
+                                  <span className="truncate text-sm font-semibold text-slate-900">{first.title}</span>
+                                  {!first.isRead && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />}
+                                </span>
+                                <span className="mt-1 block text-xs leading-relaxed text-slate-600">{first.body}</span>
+                                <span className="mt-2 block text-[11px] text-slate-400">{relativeTime(first.createdAt)}</span>
+                              </button>
+                              {!first.isRead && (
+                                <button
+                                  type="button"
+                                  onClick={() => void markRead(first)}
+                                  title="Mark as read"
+                                  aria-label="Mark as read, without opening this notification"
+                                  className="shrink-0 rounded-full p-1.5 text-slate-300 opacity-100 transition hover:bg-brand-50 hover:text-brand-700 sm:opacity-0 sm:group-hover/row:opacity-100"
+                                >
+                                  <CheckIcon className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
 
                             {isInvitation(first) && !first.isResolved && (
                               <div className="mt-3 flex flex-wrap items-center gap-1.5">

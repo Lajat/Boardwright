@@ -5,7 +5,7 @@ import { InviteDecisionModel, InvitationModel } from "../models/Invitation";
 import { NotificationModel } from "../models/Notification";
 import { UserModel } from "../models/User";
 import { WorkspaceModel } from "../models/Workspace";
-import { isWorkspaceMember } from "../lib/permissions";
+import { DEFAULT_GUEST_CARD_PERMISSIONS, isWorkspaceMember } from "../lib/permissions";
 import { notificationResponse, notifyUser } from "../lib/notify";
 import type { InvitePreview, Workspace, WorkspaceMember } from "@fluxboard/shared-types";
 import { SocketEvents } from "@fluxboard/shared-types";
@@ -180,11 +180,18 @@ export async function respondToInvite(req: Request, res: Response) {
         },
       });
     } else {
+      // An email invite (target.invitation set) carries its own
+      // canAddCards/canEditCards/canDeleteCards, chosen when it was sent —
+      // see addBoardGuest. The board's general share link has no per-invite
+      // role picker at all (target.invitation is null there), so it falls
+      // back to DEFAULT_GUEST_CARD_PERMISSIONS (Contributor), not full
+      // access — the same default addBoardGuest uses when nobody picks a
+      // role explicitly.
       target.board.guestPermissions.push({
         userId: user._id,
-        canAddCards: target.invitation?.canAddCards ?? true,
-        canEditCards: target.invitation?.canEditCards ?? true,
-        canDeleteCards: target.invitation?.canDeleteCards ?? true,
+        canAddCards: target.invitation?.canAddCards ?? DEFAULT_GUEST_CARD_PERMISSIONS.canAdd,
+        canEditCards: target.invitation?.canEditCards ?? DEFAULT_GUEST_CARD_PERMISSIONS.canEdit,
+        canDeleteCards: target.invitation?.canDeleteCards ?? DEFAULT_GUEST_CARD_PERMISSIONS.canDelete,
       });
       await target.board.save();
       io.to(`user:${req.userId}`).emit(SocketEvents.ACCESS_GRANTED, {
@@ -193,6 +200,27 @@ export async function respondToInvite(req: Request, res: Response) {
         resourceType: "board",
         resourceId: target.board.id,
         resourceName: target.board.title,
+      });
+      // Tell everyone ALREADY on this board — the owner and any workspace
+      // member with it open — that a new guest just joined, so their
+      // BoardMembersModal/AvatarStack update live instead of only catching
+      // up on their next full page load. Mirrors MEMBER_ADDED's broadcast
+      // to the workspace room; board:<id> is the equivalent room for a
+      // single board (joined via the "join-board" socket event).
+      const addedGuest = {
+        id: user._id.toString(),
+        email: user.email,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        permissions: {
+          canAdd: target.invitation?.canAddCards ?? DEFAULT_GUEST_CARD_PERMISSIONS.canAdd,
+          canEdit: target.invitation?.canEditCards ?? DEFAULT_GUEST_CARD_PERMISSIONS.canEdit,
+          canDelete: target.invitation?.canDeleteCards ?? DEFAULT_GUEST_CARD_PERMISSIONS.canDelete,
+        },
+      };
+      io.to(`board:${target.board.id}`).emit(SocketEvents.BOARD_GUEST_ADDED, {
+        boardId: target.board.id,
+        guest: addedGuest,
       });
     }
   }

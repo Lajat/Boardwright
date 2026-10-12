@@ -6,27 +6,11 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { avatarColorFor, initialsFor } from "@/lib/avatar";
 import { emailError } from "@/lib/validation";
 import { CheckIcon, CrownIcon, LinkIcon, SearchIcon, SpinnerIcon, TrashIcon, UserPlusIcon } from "./ui/icons";
+import { buildAccessList, type AccessLevel } from "@/lib/access";
+import { detectWorkspacePreset, detectGuestPreset } from "@/lib/permissionPresets";
 import type { BoardGuest, WorkspaceMember } from "@fluxboard/shared-types";
 
-type AccessLevel = "owner" | "member" | "guest";
 type AccessFilter = "total" | "viewing";
-
-/**
- * One row in the combined access list — a workspace owner, a workspace
- * member, or a single-board guest, normalized to the same shape so they can
- * be searched, sorted, and rendered together. `source` keeps a reference to
- * the original record: only a `guest` row can be removed from here (removing
- * a workspace member/owner is a workspace-level action that lives in
- * MembersModal, not this board-scoped one).
- */
-interface AccessRow {
-  id: string;
-  email: string;
-  displayName: string;
-  avatarUrl?: string;
-  accessLevel: AccessLevel;
-  source: WorkspaceMember | BoardGuest;
-}
 
 const ACCESS_LEVEL_BADGE: Record<AccessLevel, { label: string; className: string }> = {
   owner: { label: "Owner", className: "bg-amber-50 text-amber-700" },
@@ -51,7 +35,12 @@ interface BoardMembersModalProps {
   onInvite: (email: string) => Promise<void>;
   onRemove: (guest: BoardGuest) => Promise<void>;
   onRegenerateInviteLink: () => Promise<void>;
+  /** Changes a guest's card permissions to the given preset — Viewer or Contributor only, never Full access (see the picker below for why). */
+  onUpdateGuestPermissions: (guest: BoardGuest, preset: "Viewer" | "Contributor") => Promise<void>;
 }
+
+/** The only two levels a board guest can be set to. Full access is deliberately not offered here — see the picker's own comment. */
+const GUEST_ASSIGNABLE_PRESETS = ["Viewer", "Contributor"] as const;
 
 /**
  * Everyone with access to this board — workspace owner and members (who can
@@ -79,6 +68,7 @@ export function BoardMembersModal({
   onInvite,
   onRemove,
   onRegenerateInviteLink,
+  onUpdateGuestPermissions,
 }: BoardMembersModalProps) {
   const [email, setEmail] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -88,40 +78,30 @@ export function BoardMembersModal({
   const [filter, setFilter] = useState<AccessFilter>("total");
   const [removingGuest, setRemovingGuest] = useState<BoardGuest | null>(null);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  // Keyed by guest id, so applying a preset to one guest never disables the
+  // picker on another guest's row while its own request is in flight.
+  const [savingGuestId, setSavingGuestId] = useState<string | null>(null);
   const inviteInFlight = useRef(false);
 
   const activeIds = useMemo(() => new Set(activeUserIds), [activeUserIds]);
+  const rows = useMemo(() => buildAccessList(members, guests), [members, guests]);
 
-  const rows = useMemo<AccessRow[]>(() => {
-    const memberRows: AccessRow[] = members.map((member) => ({
-      id: member.id,
-      email: member.email,
-      displayName: member.displayName,
-      avatarUrl: member.avatarUrl,
-      accessLevel: member.role === "owner" ? "owner" : "member",
-      source: member,
-    }));
-    // A board guest is, by definition, not a workspace member (see the
-    // BoardGuest type) — this filter is just a defensive guard against
-    // showing the same person twice if that invariant is ever violated,
-    // not an expected case.
-    const memberIds = new Set(memberRows.map((row) => row.id));
-    const guestRows: AccessRow[] = guests
-      .filter((guest) => !memberIds.has(guest.id))
-      .map((guest) => ({
-        id: guest.id,
-        email: guest.email,
-        displayName: guest.displayName,
-        avatarUrl: guest.avatarUrl,
-        accessLevel: "guest",
-        source: guest,
-      }));
-    return [...memberRows, ...guestRows].sort((a, b) => {
-      const rank: Record<AccessLevel, number> = { owner: 0, member: 1, guest: 2 };
-      if (rank[a.accessLevel] !== rank[b.accessLevel]) return rank[a.accessLevel] - rank[b.accessLevel];
-      return a.displayName.localeCompare(b.displayName);
-    });
-  }, [members, guests]);
+  // Same rule as every other permission-setting action in the app
+  // (updateWorkspace, MembersModal's own preset picker): the owner can
+  // always do it, and otherwise it takes the explicit canEditWorkspace
+  // right, not just workspace membership — plain membership alone doesn't
+  // imply the ability to manage someone else's access.
+  const canManageGuests =
+    isOwner || members.find((member) => member.id === currentUserId)?.permissions.canEditWorkspace === true;
+
+  async function handleApplyGuestPreset(guest: BoardGuest, preset: "Viewer" | "Contributor") {
+    setSavingGuestId(guest.id);
+    try {
+      await onUpdateGuestPermissions(guest, preset);
+    } finally {
+      setSavingGuestId(null);
+    }
+  }
 
   const viewingCount = useMemo(() => rows.filter((row) => activeIds.has(row.id)).length, [rows, activeIds]);
 
@@ -252,61 +232,29 @@ export function BoardMembersModal({
 
         <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-700">People with access</h3>
-          <div className="mb-2 flex gap-1" role="tablist" aria-label="Filter people by access">
-          {(
-            [
-              ["total", `Total · ${rows.length}`],
-              ["viewing", `Viewing · ${viewingCount}`],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={filter === value}
-              onClick={() => setFilter(value)}
-              className={`relative px-3 py-2 text-xs font-semibold transition ${
-                filter === value ? "text-brand-700" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              {label}
-              {filter === value && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-brand-600" />}
-            </button>
-          ))}
+          <div className="flex gap-1" role="tablist" aria-label="Filter people by access">
+            {(
+              [
+                ["total", `Total · ${rows.length}`],
+                ["viewing", `Viewing · ${viewingCount}`],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={filter === value}
+                onClick={() => setFilter(value)}
+                className={`relative px-3 py-2 text-xs font-semibold transition ${
+                  filter === value ? "text-brand-700" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {label}
+                {filter === value && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-brand-600" />}
+              </button>
+            ))}
           </div>
         </div>
-        {/* <div className="mb-2 flex gap-1" role="tablist" aria-label="Filter people by access">
-          {(
-            [
-              ["total", `Total · ${rows.length}`],
-              ["viewing", `Viewing · ${viewingCount}`],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={filter === value}
-              onClick={() => setFilter(value)}
-              className={`relative px-3 py-2 text-xs font-semibold transition ${
-                filter === value ? "text-brand-700" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              {label}
-              {filter === value && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-brand-600" />}
-            </button>
-          ))}
-        </div> */}
-
-        {/* <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-700">People with access</h3>
-          <span className="text-right text-xs text-slate-400">
-            {activeMemberCount > 0 && (
-              <span className="mr-2 font-medium text-emerald-700">{activeMemberCount} viewing</span>
-            )}
-            {members.length} total
-          </span>
-        </div> */}
 
         <label className="relative mb-2 block">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -329,40 +277,97 @@ export function BoardMembersModal({
           <ul className="max-h-[min(50vh,28rem)] space-y-1 overflow-y-auto">
             {visibleRows.map((row) => {
               const badge = ACCESS_LEVEL_BADGE[row.accessLevel];
+              // Owner's access isn't governed by a preset (always full
+              // access), so there's nothing to append for that row — only
+              // members and guests get a " · <preset>" suffix. Two
+              // different 3-vs-6-flag shapes feed the same preset names via
+              // lib/permissionPresets, so "Contributor" can't drift between
+              // what a workspace member sees and what a board guest sees.
+              const preset =
+                row.accessLevel === "member"
+                  ? detectWorkspacePreset((row.source as WorkspaceMember).permissions)
+                  : row.accessLevel === "guest"
+                    ? detectGuestPreset((row.source as BoardGuest).permissions)
+                    : null;
+              const canEditThisGuest = canManageGuests && row.accessLevel === "guest";
               return (
-                <li key={row.id} className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-slate-50">
-                  <span
-                    className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColorFor(
-                      row.id
-                    )}`}
-                  >
-                    {initialsFor(row.displayName)}
-                    {activeIds.has(row.id) && (
-                      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-800">
-                      {row.displayName}
-                      {row.id === currentUserId && <span className="ml-1.5 font-normal text-slate-400">(you)</span>}
-                    </p>
-                    <p className="truncate text-xs text-slate-500">{row.email}</p>
-                  </div>
-                  <span
-                    className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${badge.className}`}
-                  >
-                    {row.accessLevel === "owner" && <CrownIcon aria-hidden="true" className="h-3 w-3" />}
-                    {badge.label}
-                  </span>
-                  {isOwner && row.accessLevel === "guest" && (
-                    <button
-                      type="button"
-                      onClick={() => setRemovingGuest(row.source as BoardGuest)}
-                      aria-label={`Remove ${row.displayName} from this board`}
-                      className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                <li key={row.id} className="rounded-xl px-2 py-2.5 hover:bg-slate-50">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColorFor(
+                        row.id
+                      )}`}
                     >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
+                      {initialsFor(row.displayName)}
+                      {activeIds.has(row.id) && (
+                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-800">
+                        {row.displayName}
+                        {row.id === currentUserId && <span className="ml-1.5 font-normal text-slate-400">(you)</span>}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">{row.email}</p>
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${badge.className}`}
+                      title={row.accessLevel !== "owner" ? `${badge.label} — ${preset ?? "custom"} access` : undefined}
+                    >
+                      {row.accessLevel === "owner" && <CrownIcon aria-hidden="true" className="h-3 w-3" />}
+                      {badge.label}
+                      {row.accessLevel !== "owner" && ` · ${preset ?? "Custom"}`}
+                    </span>
+                    {isOwner && row.accessLevel === "guest" && (
+                      <button
+                        type="button"
+                        onClick={() => setRemovingGuest(row.source as BoardGuest)}
+                        aria-label={`Remove ${row.displayName} from this board`}
+                        className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Only a guest's level is editable here — a workspace
+                      member's own level belongs to MembersModal, the same
+                      split as the remove button above. Capped to Viewer and
+                      Contributor: Full access would let someone outside the
+                      workspace delete cards on a board they don't otherwise
+                      belong to, so it's deliberately not offered as an
+                      option (and the backend refuses it even if asked for
+                      directly). */}
+                  {canEditThisGuest && (
+                    <fieldset
+                      disabled={savingGuestId === row.id}
+                      className="ml-[3.25rem] mt-2"
+                      aria-label={`${row.displayName} access level`}
+                    >
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {GUEST_ASSIGNABLE_PRESETS.map((presetOption) => {
+                          const isActive = preset === presetOption;
+                          return (
+                            <button
+                              key={presetOption}
+                              type="button"
+                              aria-pressed={isActive}
+                              onClick={() => handleApplyGuestPreset(row.source as BoardGuest, presetOption)}
+                              className={`rounded-lg border px-2 py-1.5 text-left text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-300 ${
+                                isActive
+                                  ? "border-brand-300 bg-brand-50 text-brand-700"
+                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                              }`}
+                            >
+                              <span className="block">{presetOption}</span>
+                              <span className="mt-0.5 block text-[10px] font-normal leading-tight text-slate-500">
+                                {presetOption === "Viewer" ? "View only" : "Add and edit cards"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                   )}
                 </li>
               );

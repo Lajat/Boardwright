@@ -7,7 +7,7 @@ import { CardModel } from "../models/Card";
 import { UserModel } from "../models/User";
 import type { Board } from "@fluxboard/shared-types";
 import { SocketEvents } from "@fluxboard/shared-types";
-import { getMemberPermissions, isWorkspaceMember, resolveBoardAccess } from "../lib/permissions";
+import { DEFAULT_GUEST_CARD_PERMISSIONS, getMemberPermissions, isWorkspaceMember, resolveBoardAccess } from "../lib/permissions";
 import { generateKeyPrefix } from "../lib/taskId";
 import { createNotification, emitNotification, notificationResponse, notifyUser } from "../lib/notify";
 import { InvitationModel } from "../models/Invitation";
@@ -313,7 +313,14 @@ export async function listBoardGuests(req: Request, res: Response) {
  */
 export async function addBoardGuest(req: Request, res: Response) {
   const { boardId } = req.params;
-  const { email, canAdd = true, canEdit = true, canDelete = true } = req.body;
+  // Unspecified permissions default to Contributor (add + edit, no delete)
+  // rather than full access — see DEFAULT_GUEST_CARD_PERMISSIONS.
+  const {
+    email,
+    canAdd = DEFAULT_GUEST_CARD_PERMISSIONS.canAdd,
+    canEdit = DEFAULT_GUEST_CARD_PERMISSIONS.canEdit,
+    canDelete = DEFAULT_GUEST_CARD_PERMISSIONS.canDelete,
+  } = req.body;
 
   if (!email) {
     return res.status(400).json({ error: "email is required" });
@@ -384,9 +391,19 @@ export async function addBoardGuest(req: Request, res: Response) {
 
 /**
  * PATCH /boards/:boardId/guests/:userId
- * Updates an existing guest's card-level permissions on this board.
- * Owner-only, same dependency rule as every other permission-setting
- * endpoint in the app.
+ * Updates an existing guest's card-level permissions on this board. The
+ * owner can always do this; other members need canEditWorkspace, same rule
+ * as updateWorkspace and every other permission-setting endpoint in the app
+ * — a guest's access is workspace-adjacent, so it's gated the same way a
+ * workspace member's own permissions are, rather than carrying its own
+ * separate owner-only rule.
+ *
+ * A guest can only ever be set to Viewer or Contributor here — never Full
+ * access — enforced below regardless of what the request body asks for.
+ * Full access would let someone outside the workspace delete cards on a
+ * board they don't otherwise belong to; that's a deliberate ceiling, not an
+ * oversight, so it's enforced server-side rather than only hidden from the
+ * permission picker in the UI.
  */
 export async function updateBoardGuestPermissions(req: Request, res: Response) {
   const { boardId, userId } = req.params;
@@ -398,8 +415,12 @@ export async function updateBoardGuestPermissions(req: Request, res: Response) {
   }
 
   const workspace = await WorkspaceModel.findById(board.workspaceId);
-  if (!workspace || workspace.ownerId.toString() !== req.userId) {
-    return res.status(403).json({ error: "only the workspace owner can change a guest's permissions" });
+  if (!workspace) {
+    return res.status(404).json({ error: "board not found" });
+  }
+  const callerPermissions = getMemberPermissions(workspace, req.userId!);
+  if (!callerPermissions?.canEditWorkspace) {
+    return res.status(403).json({ error: "you don't have permission to change a guest's permissions" });
   }
 
   const entry = board.guestPermissions.find((g) => g.userId.toString() === userId);
@@ -409,11 +430,10 @@ export async function updateBoardGuestPermissions(req: Request, res: Response) {
 
   if (canAdd !== undefined) entry.canAddCards = !!canAdd;
   if (canEdit !== undefined) entry.canEditCards = !!canEdit;
-  if (canDelete !== undefined) entry.canDeleteCards = !!canDelete;
-
-  if (entry.canDeleteCards && !(entry.canAddCards && entry.canEditCards)) {
-    return res.status(400).json({ error: "canDelete requires canAdd and canEdit to also be true" });
-  }
+  // Guests are capped at Contributor — canDeleteCards is never settable
+  // through this endpoint, whatever the request asks for. See the doc
+  // comment above for why.
+  entry.canDeleteCards = false;
 
   await board.save();
 
@@ -444,6 +464,11 @@ export async function removeBoardGuest(req: Request, res: Response) {
   }
   board.guestPermissions = board.guestPermissions.filter((g) => g.userId.toString() !== userId);
   await board.save();
+
+  // Tell everyone else currently on this board that this guest is gone, so
+  // their BoardMembersModal/AvatarStack drop them immediately rather than
+  // only on next load — the removal counterpart to BOARD_GUEST_ADDED.
+  req.app.get("io").to(`board:${boardId}`).emit(SocketEvents.BOARD_GUEST_REMOVED, { boardId, userId });
 
   // Mirrors ACCESS_REVOKED for workspace members — sent to the removed
   // guest's own room so their client can immediately back out of this

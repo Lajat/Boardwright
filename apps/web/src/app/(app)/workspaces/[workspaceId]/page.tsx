@@ -8,6 +8,7 @@ import { useActiveWorkspace } from "@/context/ActiveWorkspaceContext";
 import { useToast } from "@/components/ui/Toast";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { publishSidebarSync } from "@/lib/sidebarSync";
+import { detectWorkspacePreset } from "@/lib/permissionPresets";
 import { getSocket } from "@/lib/socket";
 import { EditableTitle } from "@/components/ui/EditableTitle";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -477,11 +478,21 @@ export default function WorkspaceBoardsPage() {
                 className="text-xl font-bold text-slate-900 sm:text-2xl"
                 inputClassName="w-full rounded-lg border border-brand-300 bg-white px-2 py-0.5 text-xl font-bold text-slate-900 outline-none ring-2 ring-brand-100 sm:text-2xl"
               />
-              {isOwner && (
+              {isOwner ? (
                 <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
                   <CrownIcon aria-hidden="true" className="h-3.5 w-3.5" />
                   Owner
                 </span>
+              ) : (
+                !workspace?.isBoardGuest &&
+                workspace?.myPermissions && (
+                  <span
+                    title={`Member — ${detectWorkspacePreset(workspace.myPermissions) ?? "custom"} access`}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+                  >
+                    Member · {detectWorkspacePreset(workspace.myPermissions) ?? "Custom"}
+                  </span>
+                )
               )}
             </div>
             <p className="mt-1.5 text-sm text-slate-500">

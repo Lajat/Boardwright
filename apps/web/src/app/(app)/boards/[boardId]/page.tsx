@@ -22,6 +22,7 @@ import { useToast } from "@/components/ui/Toast";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { publishSidebarSync } from "@/lib/sidebarSync";
 import { getSocket } from "@/lib/socket";
+import { GUEST_PERMISSION_PRESETS, detectGuestPreset } from "@/lib/permissionPresets";
 import { BoardColumn } from "@/components/BoardColumn";
 import { TaskCardView } from "@/components/TaskCard";
 import { CardDetailModal, type CardUpdates } from "@/components/CardDetailModal";
@@ -55,6 +56,8 @@ import {
   type CardMovedPayload,
   type WorkspaceMembershipPayload,
   type MemberPermissionsUpdatedPayload,
+  type BoardGuestAddedPayload,
+  type BoardGuestRemovedPayload,
   type AccessRevokedPayload,
 } from "@fluxboard/shared-types";
 
@@ -401,6 +404,21 @@ export default function BoardPage() {
       setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
     }
 
+    // Keeps BoardMembersModal/AvatarStack in sync in real time when a board
+    // guest accepts an invite or is removed — previously nothing updated
+    // this list, so the owner only saw a newly-accepted guest after a full
+    // page reload. Scoped by boardId (not workspaceId): a board guest is
+    // never tied to the workspace the way a member is.
+    function handleBoardGuestAdded({ boardId: bId, guest }: BoardGuestAddedPayload) {
+      if (bId !== boardId) return;
+      setBoardGuests((prev) => (prev.some((g) => g.id === guest.id) ? prev : [...prev, guest]));
+    }
+
+    function handleBoardGuestRemoved({ boardId: bId, userId }: BoardGuestRemovedPayload) {
+      if (bId !== boardId) return;
+      setBoardGuests((prev) => prev.filter((g) => g.id !== userId));
+    }
+
     socket.on(SocketEvents.BOARD_UPDATED, handleBoardUpdated);
     socket.on(SocketEvents.BOARD_DELETED, handleBoardDeleted);
     socket.on(SocketEvents.WORKSPACE_DELETED, handleWorkspaceDeleted);
@@ -408,6 +426,8 @@ export default function BoardPage() {
     socket.on(SocketEvents.MEMBER_ADDED, handleMemberAdded);
     socket.on(SocketEvents.MEMBER_REMOVED, handleMemberRemoved);
     socket.on(SocketEvents.MEMBER_PERMISSIONS_UPDATED, handleMemberPermissionsUpdated);
+    socket.on(SocketEvents.BOARD_GUEST_ADDED, handleBoardGuestAdded);
+    socket.on(SocketEvents.BOARD_GUEST_REMOVED, handleBoardGuestRemoved);
 
     return () => {
       if (!workspace?.isBoardGuest) socket.emit("leave-workspace", workspaceId);
@@ -419,6 +439,8 @@ export default function BoardPage() {
       socket.off(SocketEvents.MEMBER_ADDED, handleMemberAdded);
       socket.off(SocketEvents.MEMBER_REMOVED, handleMemberRemoved);
       socket.off(SocketEvents.MEMBER_PERMISSIONS_UPDATED, handleMemberPermissionsUpdated);
+      socket.off(SocketEvents.BOARD_GUEST_ADDED, handleBoardGuestAdded);
+      socket.off(SocketEvents.BOARD_GUEST_REMOVED, handleBoardGuestRemoved);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board?.workspaceId, boardId, accessToken, workspace?.isBoardGuest]);
@@ -609,6 +631,27 @@ export default function BoardPage() {
       showToast(`${guest.displayName} was removed from the board`);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Failed to remove board guest", "error");
+    }
+  }
+
+  async function handleUpdateGuestPermissions(guest: BoardGuest, preset: "Viewer" | "Contributor") {
+    const permissions = GUEST_PERMISSION_PRESETS[preset];
+    // Applied optimistically, same as every other permission toggle in the
+    // app (MembersModal's preset buttons do the same) — the picker should
+    // feel immediate, and the PATCH response below reconciles it with
+    // whatever the server actually persisted if anything differs.
+    setBoardGuests((prev) => prev.map((entry) => (entry.id === guest.id ? { ...entry, permissions } : entry)));
+    try {
+      const updated = await apiFetch<BoardGuest>(`/boards/${boardId}/guests/${guest.id}`, {
+        method: "PATCH",
+        accessToken,
+        body: permissions,
+      });
+      setBoardGuests((prev) => prev.map((entry) => (entry.id === guest.id ? updated : entry)));
+    } catch (err) {
+      // Roll back to what the guest actually had before the optimistic update.
+      setBoardGuests((prev) => prev.map((entry) => (entry.id === guest.id ? guest : entry)));
+      showToast(err instanceof ApiError ? err.message : "Failed to update that guest's permissions", "error");
     }
   }
 
@@ -973,6 +1016,20 @@ export default function BoardPage() {
                 {lists.length} list{lists.length === 1 ? "" : "s"}
               </span>
             )}
+            {/* A guest can't open BoardMembersModal (see the gate below) —
+                deliberately: its own copy promises guests never see the
+                workspace's member list. But knowing your own access level
+                isn't a privacy leak the way seeing everyone else's would
+                be, so it gets this one small read-only chip instead of the
+                full modal. */}
+            {workspace?.isBoardGuest && (
+              <span
+                className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
+                title={`Board guest — ${detectGuestPreset(myPermissions) ?? "custom"} access`}
+              >
+                Board guest · {detectGuestPreset(myPermissions) ?? "Custom"}
+              </span>
+            )}
           </div>
           <div className="flex min-w-0 items-center justify-end gap-2 [grid-area:actions] sm:gap-2.5">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -988,9 +1045,10 @@ export default function BoardPage() {
                   <span className="hidden sm:inline">Add list</span>
                 </button>
               )}
-              {members.length > 0 && (
+              {(members.length > 0 || boardGuests.length > 0) && (
                 <AvatarStack
                   members={members}
+                  guests={boardGuests}
                   activeMemberIds={activeBoardUserIds}
                   onClick={() => setIsMembersModalOpen(true)}
                   size="sm"
@@ -1401,6 +1459,7 @@ export default function BoardPage() {
           isOwner={isOwner}
           onInvite={handleInviteGuest}
           onRemove={handleRemoveGuest}
+          onUpdateGuestPermissions={handleUpdateGuestPermissions}
           inviteLink={
             inviteToken && typeof window !== "undefined"
               ? `${window.location.origin}/invite/${inviteToken}`
