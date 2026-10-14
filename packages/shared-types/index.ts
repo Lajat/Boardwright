@@ -216,6 +216,14 @@ export const SocketEvents = {
   // the workspace immediately instead of waiting for a failed API request.
   ACCESS_REVOKED: "workspace:access-revoked",
   ACCESS_GRANTED: "workspace:access-granted",
+  // Sent to the board:<id> room (everyone currently on that board — see
+  // "join-board") when a single-board guest accepts an invite or is
+  // removed, so BoardMembersModal/AvatarStack update live instead of only
+  // catching up on the next full page load. Unlike MEMBER_ADDED/REMOVED,
+  // these are board-scoped, not workspace-scoped: a board guest is never a
+  // workspace member.
+  BOARD_GUEST_ADDED: "board:guest-added",
+  BOARD_GUEST_REMOVED: "board:guest-removed",
   COMMENT_ADDED: "comment:added",
   NOTIFICATION_CREATED: "notification:created",
   NOTIFICATION_UPDATED: "notification:updated",
@@ -253,6 +261,18 @@ export interface WorkspaceMemberRemovedPayload {
 export interface MemberPermissionsUpdatedPayload {
   workspaceId: string;
   member: WorkspaceMember;
+}
+
+/** Payload for `board:guest-added`. */
+export interface BoardGuestAddedPayload {
+  boardId: string;
+  guest: BoardGuest;
+}
+
+/** Payload for `board:guest-removed`. */
+export interface BoardGuestRemovedPayload {
+  boardId: string;
+  userId: string;
 }
 
 /** Payload for `workspace:access-revoked`, sent to the affected user. */

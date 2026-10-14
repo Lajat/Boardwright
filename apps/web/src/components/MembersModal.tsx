@@ -6,6 +6,12 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { avatarColorFor, initialsFor } from "@/lib/avatar";
 import { emailError as getEmailError } from "@/lib/validation";
 import { UserPlusIcon, TrashIcon, SpinnerIcon, LinkIcon, CheckIcon, SearchIcon } from "./ui/icons";
+import {
+  WORKSPACE_PERMISSION_PRESETS as permissionPresets,
+  detectWorkspacePreset,
+  workspaceRoleLabel,
+  type PermissionPreset,
+} from "@/lib/permissionPresets";
 import type { WorkspaceMember, WorkspacePermissions } from "@fluxboard/shared-types";
 
 type PermissionAxis = "Boards" | "Cards";
@@ -17,9 +23,6 @@ type PermissionField =
   | "canAddCards"
   | "canEditCards"
   | "canDeleteCards";
-type WorkspacePermissionFlags = Pick<WorkspacePermissions, PermissionField>;
-type PermissionPreset = "Viewer" | "Contributor" | "Full access";
-
 const permissionFields: Record<PermissionAxis, Record<PermissionAction, PermissionField>> = {
   Boards: {
     Add: "canAddBoards",
@@ -30,33 +33,6 @@ const permissionFields: Record<PermissionAxis, Record<PermissionAction, Permissi
     Add: "canAddCards",
     Edit: "canEditCards",
     Delete: "canDeleteCards",
-  },
-};
-
-const permissionPresets: Record<PermissionPreset, WorkspacePermissionFlags> = {
-  Viewer: {
-    canAddBoards: false,
-    canEditBoards: false,
-    canDeleteBoards: false,
-    canAddCards: false,
-    canEditCards: false,
-    canDeleteCards: false,
-  },
-  Contributor: {
-    canAddBoards: false,
-    canEditBoards: false,
-    canDeleteBoards: false,
-    canAddCards: true,
-    canEditCards: true,
-    canDeleteCards: false,
-  },
-  "Full access": {
-    canAddBoards: true,
-    canEditBoards: true,
-    canDeleteBoards: true,
-    canAddCards: true,
-    canEditCards: true,
-    canDeleteCards: true,
   },
 };
 
@@ -221,14 +197,8 @@ export function MembersModal({
     await queuePermissionUpdate(member, key, permissionPresets[preset]);
   }
 
-  function getActivePreset(member: WorkspaceMember): PermissionPreset | null {
-    return (
-      (Object.keys(permissionPresets) as PermissionPreset[]).find((preset) =>
-        (Object.keys(permissionPresets[preset]) as PermissionField[]).every(
-          (field) => member.permissions[field] === permissionPresets[preset][field]
-        )
-      ) ?? null
-    );
+  function getActivePreset(member: WorkspaceMember) {
+    return detectWorkspacePreset(member.permissions);
   }
 
   return (
@@ -356,19 +326,40 @@ export function MembersModal({
                   <span className="shrink-0 text-[11px] font-medium text-emerald-700">Viewing board</span>
                 )}
                 {member.role === "owner" ? (
+                  // An owner's access isn't governed by the preset system
+                  // below (they always have full access), so there's
+                  // nothing to append here the way there is for a member.
                   <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-600">
                     Owner
                   </span>
                 ) : (
-                  isOwner && (
-                    <button
-                      onClick={() => setRemovingMember(member)}
-                      aria-label={`Remove ${member.displayName}`}
-                      className="shrink-0 rounded-md p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                  <>
+                    {/* One combined pill rather than two: "Member" answers who
+                        they are, the preset after the dot answers what they can
+                        do. Showing both as separate badges doubled the visual
+                        weight of every row for not much extra clarity — this
+                        keeps the row the same height as the Owner row above it. */}
+                    <span
+                      className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+                      title={
+                        getActivePreset(member)
+                          ? `${workspaceRoleLabel(member.permissions)} — ${getActivePreset(member)} access`
+                          : `${workspaceRoleLabel(member.permissions)} — custom access (doesn't match a preset)`
+                      }
                     >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  )
+                      {workspaceRoleLabel(member.permissions)}
+                      {getActivePreset(member) ? ` · ${getActivePreset(member)}` : " · Custom"}
+                    </span>
+                    {isOwner && (
+                      <button
+                        onClick={() => setRemovingMember(member)}
+                        aria-label={`Remove ${member.displayName}`}
+                        className="shrink-0 rounded-md p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
 

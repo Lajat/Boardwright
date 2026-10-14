@@ -28,7 +28,10 @@ interface BoardColumnProps {
    *  until its move finishes (see TaskCard for why this matters). */
   pendingMoveCardIds: Set<string>;
   isBoardMovePending: boolean;
+  /** Disables dragging for a reason OTHER than filters too (a viewer with no canEdit) — kept separate from hasActiveFilters below so the two causes don't get the same empty-state message. */
   disableDrag: boolean;
+  /** Whether the empty state below should say "No cards match these filters" — only true, never inferred from disableDrag, since disableDrag is also true for a viewer with an empty, unfiltered list. */
+  hasActiveFilters: boolean;
 }
 
 /**
@@ -54,6 +57,7 @@ export function BoardColumn({
   pendingMoveCardIds,
   isBoardMovePending,
   disableDrag,
+  hasActiveFilters,
 }: BoardColumnProps) {
   const columnDropId = `column-${listId}`;
   const { setNodeRef } = useDroppable({ id: columnDropId });
@@ -144,7 +148,7 @@ export function BoardColumn({
             />
           ))}
         </SortableContext>
-        {cards.length === 0 && disableDrag && (
+        {cards.length === 0 && hasActiveFilters && (
           <p className="px-2 py-4 text-center text-xs text-slate-400">No cards match these filters.</p>
         )}
         {isDroppingAtEnd &&

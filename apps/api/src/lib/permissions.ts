@@ -9,6 +9,23 @@ export interface CardPermissions {
   canDelete: boolean;
 }
 
+/**
+ * What a board guest gets when nobody picked a role explicitly — whether
+ * that's an owner inviting by email without touching the permission
+ * toggles, or someone joining through the board's general share link (which
+ * has no per-invite role picker at all). This is deliberately the
+ * "Contributor" preset (matches MembersModal's PermissionPreset of the same
+ * name) rather than full access: a guest is, by definition, someone outside
+ * the workspace, and granting delete rights to anyone who merely holds a
+ * link is a much easier mistake to make than granting it to someone you
+ * named by email with the role picker open in front of you.
+ */
+export const DEFAULT_GUEST_CARD_PERMISSIONS: CardPermissions = {
+  canAdd: true,
+  canEdit: true,
+  canDelete: false,
+};
+
 /** A workspace member additionally has workspace-scoped permissions on both axes: board-level and card-level. */
 export interface WorkspacePermissions extends CardPermissions {
   canEditWorkspace: boolean;

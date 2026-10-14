@@ -49,9 +49,15 @@ export interface BoardDocument extends Document {
 const boardGuestSchema = new Schema<BoardGuestEntry>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    // Contributor by default (add + edit, no delete) — see
+    // DEFAULT_GUEST_CARD_PERMISSIONS in lib/permissions.ts, which every
+    // current call site already passes explicitly. This schema default is
+    // a safety net for any future code path that pushes a guest entry
+    // without specifying permissions, so it can't silently regress to
+    // full access the way the explicit call sites previously did.
     canAddCards: { type: Boolean, default: true },
     canEditCards: { type: Boolean, default: true },
-    canDeleteCards: { type: Boolean, default: true },
+    canDeleteCards: { type: Boolean, default: false },
   },
   { _id: false }
 );

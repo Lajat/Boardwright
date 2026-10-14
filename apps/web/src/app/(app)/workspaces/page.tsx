@@ -13,6 +13,7 @@ import { EditableTitle } from "@/components/ui/EditableTitle";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
 import { avatarColorFor, initialsFor } from "@/lib/avatar";
+import { detectWorkspacePreset, workspaceRoleLabel } from "@/lib/permissionPresets";
 import {
   FolderIcon,
   CrownIcon,
@@ -428,7 +429,7 @@ export default function WorkspacesPage() {
                       <p className="text-xs text-slate-400">
                         {ws.memberIds.length} member{ws.memberIds.length === 1 ? "" : "s"}
                       </p>
-                      {ws.ownerId === user.id && (
+                      {ws.ownerId === user.id ? (
                         <span
                           title="You own this workspace"
                           aria-label="You own this workspace"
@@ -437,6 +438,18 @@ export default function WorkspacesPage() {
                           <CrownIcon aria-hidden="true" className="h-3.5 w-3.5" />
                           Owner
                         </span>
+                      ) : (
+                        // Same "role · preset" format as MembersModal's member
+                        // row, so a workspace card and its own members list
+                        // never disagree about what "Contributor" means here.
+                        ws.myPermissions && (
+                          <span
+                            title={`${workspaceRoleLabel(ws.myPermissions)} — ${detectWorkspacePreset(ws.myPermissions) ?? "custom"} access`}
+                            className="inline-flex shrink-0 items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+                          >
+                            {workspaceRoleLabel(ws.myPermissions)} · {detectWorkspacePreset(ws.myPermissions) ?? "Custom"}
+                          </span>
+                        )
                       )}
                     </div>
                   </div>

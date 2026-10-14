@@ -25,9 +25,13 @@ const invitationSchema = new Schema<InvitationDocument>({
   inviterId: { type: Schema.Types.ObjectId, ref: "User", required: true },
   recipientId: { type: Schema.Types.ObjectId, ref: "User", required: true },
   status: { type: String, enum: ["pending", "snoozed", "accepted", "declined", "revoked"], default: "pending" },
+  // Contributor by default — see DEFAULT_GUEST_CARD_PERMISSIONS in
+  // lib/permissions.ts. Only meaningful for scope "board": a workspace-scope
+  // invite's acceptance path (respondToInvite) grants full workspace-member
+  // permissions unconditionally and never reads these three fields at all.
   canAddCards: { type: Boolean, default: true },
   canEditCards: { type: Boolean, default: true },
-  canDeleteCards: { type: Boolean, default: true },
+  canDeleteCards: { type: Boolean, default: false },
   notificationId: { type: Schema.Types.ObjectId, ref: "Notification" },
   snoozedUntil: { type: Date },
   createdAt: { type: Date, default: Date.now },
