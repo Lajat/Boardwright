@@ -9,6 +9,7 @@ import { UserPlusIcon, TrashIcon, SpinnerIcon, LinkIcon, CheckIcon, SearchIcon }
 import {
   WORKSPACE_PERMISSION_PRESETS as permissionPresets,
   detectWorkspacePreset,
+  workspaceRoleLabel,
   type PermissionPreset,
 } from "@/lib/permissionPresets";
 import type { WorkspaceMember, WorkspacePermissions } from "@fluxboard/shared-types";
@@ -342,11 +343,12 @@ export function MembersModal({
                       className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
                       title={
                         getActivePreset(member)
-                          ? `Member — ${getActivePreset(member)} access`
-                          : "Member — custom access (doesn't match a preset)"
+                          ? `${workspaceRoleLabel(member.permissions)} — ${getActivePreset(member)} access`
+                          : `${workspaceRoleLabel(member.permissions)} — custom access (doesn't match a preset)`
                       }
                     >
-                      Member{getActivePreset(member) ? ` · ${getActivePreset(member)}` : " · Custom"}
+                      {workspaceRoleLabel(member.permissions)}
+                      {getActivePreset(member) ? ` · ${getActivePreset(member)}` : " · Custom"}
                     </span>
                     {isOwner && (
                       <button

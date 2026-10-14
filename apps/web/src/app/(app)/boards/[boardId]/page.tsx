@@ -648,6 +648,7 @@ export default function BoardPage() {
         body: permissions,
       });
       setBoardGuests((prev) => prev.map((entry) => (entry.id === guest.id ? updated : entry)));
+      showToast(`${guest.displayName}'s access is now ${preset}`);
     } catch (err) {
       // Roll back to what the guest actually had before the optimistic update.
       setBoardGuests((prev) => prev.map((entry) => (entry.id === guest.id ? guest : entry)));
@@ -1002,7 +1003,14 @@ export default function BoardPage() {
           >
             <ChevronLeftIcon className="h-4 w-4 shrink-0" /> Back to boards
           </Link>
-          <div className="flex min-w-0 items-center gap-2 [grid-area:title]">
+          {/* flex-col on mobile: the title gets the full row to itself, and
+              the two chips wrap onto their own line underneath instead of
+              squeezing it. On an unfiltered Daily Focus–style board this
+              used to pack title + "4 lists" + "Board guest · Contributor"
+              into one row with no breathing room on a phone-width screen.
+              sm:flex-row restores today's single-line desktop layout
+              unchanged — this only ever affects the mobile width. */}
+          <div className="flex min-w-0 flex-col gap-1 [grid-area:title] sm:flex-row sm:items-center sm:gap-2">
             <EditableTitle
               as="h1"
               value={board?.title ?? ""}
@@ -1011,24 +1019,28 @@ export default function BoardPage() {
               className="min-w-0 flex-1 !overflow-hidden !whitespace-nowrap !text-ellipsis text-xl font-bold text-slate-900 sm:text-2xl"
               inputClassName="w-full max-w-md rounded-md border border-brand-300 bg-white px-2 py-1 text-xl font-bold text-slate-900 outline-none ring-2 ring-brand-100 sm:text-2xl"
             />
-            {lists.length > 0 && (
-              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
-                {lists.length} list{lists.length === 1 ? "" : "s"}
-              </span>
-            )}
-            {/* A guest can't open BoardMembersModal (see the gate below) —
-                deliberately: its own copy promises guests never see the
-                workspace's member list. But knowing your own access level
-                isn't a privacy leak the way seeing everyone else's would
-                be, so it gets this one small read-only chip instead of the
-                full modal. */}
-            {workspace?.isBoardGuest && (
-              <span
-                className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
-                title={`Board guest — ${detectGuestPreset(myPermissions) ?? "custom"} access`}
-              >
-                Board guest · {detectGuestPreset(myPermissions) ?? "Custom"}
-              </span>
+            {(lists.length > 0 || workspace?.isBoardGuest) && (
+              <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5">
+                {lists.length > 0 && (
+                  <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                    {lists.length} list{lists.length === 1 ? "" : "s"}
+                  </span>
+                )}
+                {/* A guest can't open BoardMembersModal (see the gate
+                    below) — deliberately: its own copy promises guests
+                    never see the workspace's member list. But knowing your
+                    own access level isn't a privacy leak the way seeing
+                    everyone else's would be, so it gets this one small
+                    read-only chip instead of the full modal. */}
+                {workspace?.isBoardGuest && (
+                  <span
+                    className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
+                    title={`Board guest — ${detectGuestPreset(myPermissions) ?? "custom"} access`}
+                  >
+                    Board guest · {detectGuestPreset(myPermissions) ?? "Custom"}
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <div className="flex min-w-0 items-center justify-end gap-2 [grid-area:actions] sm:gap-2.5">
@@ -1303,7 +1315,16 @@ export default function BoardPage() {
                 canDelete={myPermissions.canDelete}
                 pendingMoveCardIds={pendingMoveCardIds}
                 isBoardMovePending={isMovePending}
-                disableDrag={hasActiveFilters}
+                // A viewer (no canEdit) could previously still pick a card
+                // up and watch it visually reorder, only to have the move
+                // silently fail server-side (moveCard requires canEdit) —
+                // the card would snap back with no clear explanation. Now
+                // the drag never starts for them at all: useSortable is
+                // disabled and the cursor shows pointer instead of grab
+                // (see TaskCardView), so it reads as "click to view", not
+                // "drag that didn't work."
+                disableDrag={hasActiveFilters || !myPermissions.canEdit}
+                hasActiveFilters={hasActiveFilters}
               />
             ))}
 

@@ -154,6 +154,34 @@ export async function respondToInvite(req: Request, res: Response) {
     if (target.scope === "workspace") {
       target.workspace.memberIds.push(user._id);
       await target.workspace.save();
+
+      // If this person already had single-board guest access to one or
+      // more boards in this SAME workspace — invited to a board first,
+      // then invited to the workspace itself later — their new membership
+      // supersedes it: resolveBoardAccess checks workspace membership
+      // before ever looking at guestPermissions, so the stale entry is
+      // already functionally dead. But leaving it in place is a latent
+      // bug, not just clutter: if they're later removed as a member, this
+      // leftover entry would silently hand them back access to that one
+      // board, as if they'd never been removed at all. Clean it up now so
+      // there's nothing left to resurrect later.
+      const staleGuestBoards = await BoardModel.find({
+        workspaceId: target.workspace.id,
+        "guestPermissions.userId": user._id,
+      });
+      if (staleGuestBoards.length > 0) {
+        await BoardModel.updateMany(
+          { workspaceId: target.workspace.id, "guestPermissions.userId": user._id },
+          { $pull: { guestPermissions: { userId: user._id } } }
+        );
+        for (const board of staleGuestBoards) {
+          io.to(`board:${board.id}`).emit(SocketEvents.BOARD_GUEST_REMOVED, {
+            boardId: board.id,
+            userId: req.userId,
+          });
+        }
+      }
+
       const member: WorkspaceMember = {
         id: user._id.toString(),
         email: user.email,

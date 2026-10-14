@@ -90,7 +90,39 @@ export async function listBoardsForWorkspace(req: Request, res: Response) {
   if (!isMember && boards.length === 0) {
     return res.status(404).json({ error: "workspace not found" });
   }
-  res.json({ items: boards.map(toBoardResponse) });
+
+  // Same myPermissions getBoard attaches for a single board, added here too
+  // so a board-guest workspace entry can show each board's REAL access
+  // level (the workspace detail page does, next to each board) instead of
+  // a generic placeholder — previously this list never carried it at all,
+  // only GET /boards/:id did. Resolved inline rather than by calling
+  // resolveBoardAccess per board: that would refetch this same workspace
+  // document once per board (N+1), and a member's card permissions are
+  // uniform across every board in their workspace, so there's nothing
+  // board-specific to look up for that branch anyway. Only a guest's
+  // permissions are genuinely per-board, and those are already embedded on
+  // each board document (guestPermissions), no extra query needed.
+  const memberCardPermissions = isMember ? getMemberPermissions(workspace, req.userId!) : null;
+  const items = boards.map((board) => {
+    const myPermissions = isMember
+      ? memberCardPermissions && {
+          canAdd: memberCardPermissions.canAdd,
+          canEdit: memberCardPermissions.canEdit,
+          canDelete: memberCardPermissions.canDelete,
+        }
+      : (() => {
+          const guestEntry = board.guestPermissions.find((g) => g.userId.toString() === req.userId);
+          return (
+            guestEntry && {
+              canAdd: guestEntry.canAddCards,
+              canEdit: guestEntry.canEditCards,
+              canDelete: guestEntry.canDeleteCards,
+            }
+          );
+        })();
+    return { ...toBoardResponse(board), myPermissions: myPermissions ?? undefined };
+  });
+  res.json({ items });
 }
 
 /**

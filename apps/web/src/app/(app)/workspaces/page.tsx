@@ -13,7 +13,7 @@ import { EditableTitle } from "@/components/ui/EditableTitle";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
 import { avatarColorFor, initialsFor } from "@/lib/avatar";
-import { detectWorkspacePreset } from "@/lib/permissionPresets";
+import { detectWorkspacePreset, workspaceRoleLabel } from "@/lib/permissionPresets";
 import {
   FolderIcon,
   CrownIcon,
@@ -444,10 +444,10 @@ export default function WorkspacesPage() {
                         // never disagree about what "Contributor" means here.
                         ws.myPermissions && (
                           <span
-                            title={`Member — ${detectWorkspacePreset(ws.myPermissions) ?? "custom"} access`}
+                            title={`${workspaceRoleLabel(ws.myPermissions)} — ${detectWorkspacePreset(ws.myPermissions) ?? "custom"} access`}
                             className="inline-flex shrink-0 items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
                           >
-                            Member · {detectWorkspacePreset(ws.myPermissions) ?? "Custom"}
+                            {workspaceRoleLabel(ws.myPermissions)} · {detectWorkspacePreset(ws.myPermissions) ?? "Custom"}
                           </span>
                         )
                       )}

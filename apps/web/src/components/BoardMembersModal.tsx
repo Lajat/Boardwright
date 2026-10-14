@@ -7,7 +7,7 @@ import { avatarColorFor, initialsFor } from "@/lib/avatar";
 import { emailError } from "@/lib/validation";
 import { CheckIcon, CrownIcon, LinkIcon, SearchIcon, SpinnerIcon, TrashIcon, UserPlusIcon } from "./ui/icons";
 import { buildAccessList, type AccessLevel } from "@/lib/access";
-import { detectWorkspacePreset, detectGuestPreset } from "@/lib/permissionPresets";
+import { detectWorkspacePreset, detectGuestPreset, workspaceRoleLabel } from "@/lib/permissionPresets";
 import type { BoardGuest, WorkspaceMember } from "@fluxboard/shared-types";
 
 type AccessFilter = "total" | "viewing";
@@ -289,6 +289,16 @@ export function BoardMembersModal({
                   : row.accessLevel === "guest"
                     ? detectGuestPreset((row.source as BoardGuest).permissions)
                     : null;
+              // A member's label is Admin or Member depending on
+              // canEditWorkspace — the static ACCESS_LEVEL_BADGE map only
+              // has one label per accessLevel, so this overrides it for
+              // "member" rows specifically. Owner and guest rows use the
+              // map's label unchanged (an owner is always Owner; a guest
+              // has no canEditWorkspace concept at all).
+              const label =
+                row.accessLevel === "member"
+                  ? workspaceRoleLabel((row.source as WorkspaceMember).permissions)
+                  : badge.label;
               const canEditThisGuest = canManageGuests && row.accessLevel === "guest";
               return (
                 <li key={row.id} className="rounded-xl px-2 py-2.5 hover:bg-slate-50">
@@ -312,10 +322,10 @@ export function BoardMembersModal({
                     </div>
                     <span
                       className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${badge.className}`}
-                      title={row.accessLevel !== "owner" ? `${badge.label} — ${preset ?? "custom"} access` : undefined}
+                      title={row.accessLevel !== "owner" ? `${label} — ${preset ?? "custom"} access` : undefined}
                     >
                       {row.accessLevel === "owner" && <CrownIcon aria-hidden="true" className="h-3 w-3" />}
-                      {badge.label}
+                      {label}
                       {row.accessLevel !== "owner" && ` · ${preset ?? "Custom"}`}
                     </span>
                     {isOwner && row.accessLevel === "guest" && (

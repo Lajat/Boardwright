@@ -74,6 +74,21 @@ export function detectWorkspacePreset(permissions: WorkspacePresetFlags): Permis
   );
 }
 
+/**
+ * The user-facing name for someone with canEditWorkspace — "Admin" rather
+ * than surfacing the raw flag name anywhere in the UI. canEditWorkspace is
+ * still what's actually stored and checked (editing workspace settings,
+ * and now also changing a guest's permissions — see
+ * updateBoardGuestPermissions on the backend), this just gives it a name a
+ * non-technical reader recognizes instead of exposing the internal flag.
+ * Kept separate from the Viewer/Contributor/Full-access axis above since
+ * the two are genuinely independent today: an Admin's board/card access is
+ * still whichever of those three they're separately set to.
+ */
+export function workspaceRoleLabel(permissions: { canEditWorkspace: boolean }): "Admin" | "Member" {
+  return permissions.canEditWorkspace ? "Admin" : "Member";
+}
+
 /** Which preset a board guest's current permission flags match exactly, or null if customized. */
 export function detectGuestPreset(permissions: GuestPresetFlags): PermissionPreset | null {
   return (
