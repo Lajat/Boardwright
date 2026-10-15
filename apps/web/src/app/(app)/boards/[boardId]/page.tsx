@@ -22,7 +22,7 @@ import { useToast } from "@/components/ui/Toast";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { publishSidebarSync } from "@/lib/sidebarSync";
 import { getSocket } from "@/lib/socket";
-import { GUEST_PERMISSION_PRESETS, detectGuestPreset } from "@/lib/permissionPresets";
+import { GUEST_PERMISSION_PRESETS, detectGuestPreset, detectWorkspacePreset } from "@/lib/permissionPresets";
 import { BoardColumn } from "@/components/BoardColumn";
 import { TaskCardView } from "@/components/TaskCard";
 import { CardDetailModal, type CardUpdates } from "@/components/CardDetailModal";
@@ -150,13 +150,19 @@ export default function BoardPage() {
   // locking every button — the real enforcement is server-side anyway
   // (see apps/api/src/lib/permissions.ts), so this is purely a UX default
   // to avoid a flash of disabled buttons before the fetch resolves.
-  const myPermissions = user
-    ? board?.myPermissions ?? members.find((m) => m.id === user.id)?.permissions ?? {
-        canAdd: false,
-        canEdit: false,
-        canDelete: false,
-      }
-    : { canAdd: false, canEdit: false, canDelete: false };
+  // members/boardGuests are kept live by sockets (MEMBER_PERMISSIONS_UPDATED,
+  // BOARD_GUEST_ADDED — see above), board.myPermissions is a one-time
+  // snapshot from whenever this board was first fetched. Checking those
+  // live arrays FIRST, and only falling back to the snapshot in the brief
+  // window before either has loaded, is what makes a permission change
+  // actually take effect immediately for the person it happened to, instead
+  // of silently being shadowed by stale data from page load until a refresh.
+  const myMemberEntry = user ? members.find((m) => m.id === user.id) : undefined;
+  const myGuestEntry = user ? boardGuests.find((g) => g.id === user.id) : undefined;
+  const myPermissions = myMemberEntry
+    ? { canAdd: myMemberEntry.permissions.canAddCards, canEdit: myMemberEntry.permissions.canEditCards, canDelete: myMemberEntry.permissions.canDeleteCards }
+    : myGuestEntry?.permissions ??
+      board?.myPermissions ?? { canAdd: false, canEdit: false, canDelete: false };
   // Shown once per board, on mobile only, the first time there's more
   // than fits on screen — the edge fade is a subtle enough cue that a
   // first-time visitor might miss it entirely, so this spells it out
@@ -402,16 +408,31 @@ export default function BoardPage() {
     function handleMemberPermissionsUpdated({ workspaceId: wsId, member }: MemberPermissionsUpdatedPayload) {
       if (wsId !== workspaceId) return;
       setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
+      // If it's MY OWN access that just changed, say so — otherwise a
+      // control could silently go from enabled to disabled (or the reverse)
+      // under someone's hands with no explanation, and a drag already
+      // allowed a moment ago could start failing with no visible cause.
+      if (member.id === user?.id) {
+        showToast(`Your access to this workspace is now ${detectWorkspacePreset(member.permissions) ?? "custom"}`);
+      }
     }
 
     // Keeps BoardMembersModal/AvatarStack in sync in real time when a board
-    // guest accepts an invite or is removed — previously nothing updated
-    // this list, so the owner only saw a newly-accepted guest after a full
-    // page reload. Scoped by boardId (not workspaceId): a board guest is
-    // never tied to the workspace the way a member is.
+    // guest accepts an invite, is removed, or has their permission preset
+    // changed — previously only the join/remove cases updated this list, so
+    // a permission change was invisible to anyone except whoever clicked
+    // the picker (and even for them, it only updated optimistically — see
+    // handleUpdateGuestPermissions). Scoped by boardId, not workspaceId: a
+    // board guest is never tied to the workspace the way a member is.
     function handleBoardGuestAdded({ boardId: bId, guest }: BoardGuestAddedPayload) {
       if (bId !== boardId) return;
-      setBoardGuests((prev) => (prev.some((g) => g.id === guest.id) ? prev : [...prev, guest]));
+      setBoardGuests((prev) => {
+        const exists = prev.some((g) => g.id === guest.id);
+        return exists ? prev.map((g) => (g.id === guest.id ? guest : g)) : [...prev, guest];
+      });
+      if (guest.id === user?.id) {
+        showToast(`Your access to this board is now ${detectGuestPreset(guest.permissions) ?? "custom"}`);
+      }
     }
 
     function handleBoardGuestRemoved({ boardId: bId, userId }: BoardGuestRemovedPayload) {
@@ -1003,45 +1024,65 @@ export default function BoardPage() {
           >
             <ChevronLeftIcon className="h-4 w-4 shrink-0" /> Back to boards
           </Link>
-          {/* flex-col on mobile: the title gets the full row to itself, and
-              the two chips wrap onto their own line underneath instead of
-              squeezing it. On an unfiltered Daily Focus–style board this
-              used to pack title + "4 lists" + "Board guest · Contributor"
-              into one row with no breathing room on a phone-width screen.
-              sm:flex-row restores today's single-line desktop layout
-              unchanged — this only ever affects the mobile width. */}
-          <div className="flex min-w-0 flex-col gap-1 [grid-area:title] sm:flex-row sm:items-center sm:gap-2">
+          {/* Back to one line, title + list count always both visible —
+              that's the pair that actually matters for orienting on this
+              page, so neither should ever be the thing that gives way.
+              What changed instead is the guest badge: it used to be a full
+              "Board guest · Contributor" text pill competing with the title
+              for the same row, which is what crowded things on a phone.
+              Below sm: it's now a small lettered dot — still one line,
+              footprint of roughly one character instead of a whole phrase
+              — tap it to hear the full thing as a toast rather than losing
+              it altogether. */}
+          <div className="flex min-w-0 items-center gap-2 [grid-area:title]">
             <EditableTitle
               as="h1"
               value={board?.title ?? ""}
               onSave={handleRenameBoard}
               disabled={!myPermissions.canEdit}
+              // A Viewer's title has no click-to-rename affordance, so
+              // without this there was no way at all to read a long title
+              // once it truncates on a narrow screen — the hover-only
+              // title="" tooltip EditableTitle uses for the editable case
+              // doesn't help on a touchscreen either way.
+              onClickDisabled={() => showToast(board?.title ?? "")}
               className="min-w-0 flex-1 !overflow-hidden !whitespace-nowrap !text-ellipsis text-xl font-bold text-slate-900 sm:text-2xl"
               inputClassName="w-full max-w-md rounded-md border border-brand-300 bg-white px-2 py-1 text-xl font-bold text-slate-900 outline-none ring-2 ring-brand-100 sm:text-2xl"
             />
-            {(lists.length > 0 || workspace?.isBoardGuest) && (
-              <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5">
-                {lists.length > 0 && (
-                  <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
-                    {lists.length} list{lists.length === 1 ? "" : "s"}
-                  </span>
-                )}
-                {/* A guest can't open BoardMembersModal (see the gate
-                    below) — deliberately: its own copy promises guests
-                    never see the workspace's member list. But knowing your
-                    own access level isn't a privacy leak the way seeing
-                    everyone else's would be, so it gets this one small
-                    read-only chip instead of the full modal. */}
-                {workspace?.isBoardGuest && (
-                  <span
-                    className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
-                    title={`Board guest — ${detectGuestPreset(myPermissions) ?? "custom"} access`}
-                  >
-                    Board guest · {detectGuestPreset(myPermissions) ?? "Custom"}
-                  </span>
-                )}
-              </div>
+            {lists.length > 0 && (
+              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                {lists.length} list{lists.length === 1 ? "" : "s"}
+              </span>
             )}
+            {/* A guest can't open BoardMembersModal (see the gate below) —
+                deliberately: its own copy promises guests never see the
+                workspace's member list. But knowing your own access level
+                isn't a privacy leak the way seeing everyone else's would
+                be, so it gets this read-only indicator instead: full text
+                at sm: and up, a tap-to-reveal dot below it where a whole
+                phrase doesn't fit next to the title. */}
+            {workspace?.isBoardGuest &&
+              (() => {
+                const guestPresetLabel = detectGuestPreset(myPermissions) ?? "Custom";
+                return (
+                  <>
+                    <span
+                      className="hidden shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 sm:inline"
+                      title={`Guest — ${guestPresetLabel} access`}
+                    >
+                      Guest · {guestPresetLabel}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => showToast(`Guest access · ${guestPresetLabel}`)}
+                      aria-label={`Your access level: Guest, ${guestPresetLabel}. Tap to show this.`}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[11px] font-bold leading-none text-indigo-700 sm:hidden"
+                    >
+                      {guestPresetLabel[0]}
+                    </button>
+                  </>
+                );
+              })()}
           </div>
           <div className="flex min-w-0 items-center justify-end gap-2 [grid-area:actions] sm:gap-2.5">
             <div className="flex min-w-0 items-center gap-2.5">

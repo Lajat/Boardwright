@@ -470,7 +470,21 @@ export async function updateBoardGuestPermissions(req: Request, res: Response) {
   await board.save();
 
   const user = await UserModel.findById(userId);
-  res.json(toBoardGuestResponse(user, entry));
+  const updatedGuest = toBoardGuestResponse(user, entry);
+
+  // Without this, the guest's own open session never learns their access
+  // changed — their UI would keep showing drag/edit as available until
+  // they happened to refresh, then fail silently against the server the
+  // next time they tried. BOARD_GUEST_ADDED doubles as "here's this
+  // guest's current full state" for both joining and updating — the
+  // client-side handler for it already upserts by id rather than only
+  // inserting, so reusing it here needs no new event type.
+  req.app.get("io").to(`board:${boardId}`).emit(SocketEvents.BOARD_GUEST_ADDED, {
+    boardId,
+    guest: updatedGuest,
+  });
+
+  res.json(updatedGuest);
 }
 
 /**

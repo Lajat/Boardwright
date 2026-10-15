@@ -12,6 +12,14 @@ interface EditableTitleProps {
   actions?: ReactNode;
   /** When true, renders as plain static text — no click-to-edit affordance, no hover cue. Used to gate renaming by permission without needing a second component. */
   disabled?: boolean;
+  /**
+   * Called on click/tap instead of entering edit mode, only while disabled.
+   * The title still truncates when space is tight (className typically
+   * includes truncate/text-ellipsis) — without this there was no way at
+   * all for someone who can't rename it to ever see the untruncated text,
+   * since the native title="" tooltip doesn't help on a touchscreen.
+   */
+  onClickDisabled?: () => void;
 }
 
 /**
@@ -28,6 +36,7 @@ export function EditableTitle({
   as = "span",
   actions,
   disabled = false,
+  onClickDisabled,
 }: EditableTitleProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -106,7 +115,14 @@ export function EditableTitle({
     <div className="group/title flex min-w-0 items-center gap-1.5">
       <Tag
         onClick={(e: MouseEvent) => {
-          if (disabled) return;
+          if (disabled) {
+            if (onClickDisabled) {
+              e.preventDefault();
+              e.stopPropagation();
+              onClickDisabled();
+            }
+            return;
+          }
           // preventDefault/stopPropagation matter here because this title
           // is sometimes rendered inside a clickable <Link> (e.g. a board
           // or workspace tile) — without stopping the event, clicking the
@@ -117,7 +133,7 @@ export function EditableTitle({
         }}
         title={disabled ? undefined : "Click to rename"}
         className={`min-w-0 truncate rounded-md px-1 -mx-1 ${
-          disabled ? "" : "cursor-text hover:bg-slate-900/5"
+          disabled ? (onClickDisabled ? "cursor-pointer hover:bg-slate-900/5" : "") : "cursor-text hover:bg-slate-900/5"
         } ${className}`}
       >
         {value}

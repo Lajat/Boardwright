@@ -15,7 +15,11 @@ type AccessFilter = "total" | "viewing";
 const ACCESS_LEVEL_BADGE: Record<AccessLevel, { label: string; className: string }> = {
   owner: { label: "Owner", className: "bg-amber-50 text-amber-700" },
   member: { label: "Workspace member", className: "bg-slate-100 text-slate-600" },
-  guest: { label: "Board guest", className: "bg-indigo-50 text-indigo-700" },
+  // "Guest" rather than "Board guest" — this label only ever appears
+  // inside a board's own access list, where "guest" can't mean anything
+  // but a single-board guest, so the extra word was redundant everywhere
+  // it showed up.
+  guest: { label: "Guest", className: "bg-indigo-50 text-indigo-700" },
 };
 
 interface BoardMembersModalProps {
