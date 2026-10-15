@@ -2,4 +2,4 @@
 export const APP_NAME = "Fluxboard";
 
 /** Keep in sync with the web package version. */
-export const APP_VERSION = "1.3.0";
+export const APP_VERSION = "1.4.2";
