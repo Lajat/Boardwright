@@ -516,7 +516,8 @@ export default function WorkspaceBoardsPage() {
                 const uniform = presets.length > 0 && presets.every((preset) => preset === presets[0]) ? presets[0] : null;
                 return (
                   <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
-                    Board guest <span className="text-violet-400">·</span> {uniform ?? "limited access"}
+                    {/* "Guest" alone, not "Board guest" — the only kind of guest this app has IS a board guest, so the extra word was never disambiguating anything. */}
+                    Guest <span className="text-violet-400">·</span> {uniform ?? "limited access"}
                   </span>
                 );
               })()}
