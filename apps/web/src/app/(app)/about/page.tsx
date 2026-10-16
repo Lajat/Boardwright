@@ -12,8 +12,16 @@ const features = [
     description: "See board changes as they happen while working with your team.",
   },
   {
+    title: "Board guests",
+    description: "Share a single board with someone outside your workspace — by email or a link — without giving them access to anything else.",
+  },
+  {
     title: "Granular access",
-    description: "Workspace owners control who can add, edit, and delete boards and board content.",
+    description: "Three named levels — Viewer, Contributor, Full access — set by the workspace owner or an Admin, down to what each person can add, edit, or delete.",
+  },
+  {
+    title: "Notifications",
+    description: "Invitations and access changes land in a notification bell you can act on, or mark read, without leaving what you're doing.",
   },
   {
     title: "Card details",

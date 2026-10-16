@@ -1,9 +1,10 @@
 # Fluxboard
 
-A real-time collaborative Kanban board — Trello-style boards, lists, and
-cards with live multi-user sync, granular permissions, and shareable invite
-links. Built as a clean, well-structured full-stack TypeScript monorepo,
-not a distributed-systems showcase (see
+A real-time collaborative Kanban board: drag-and-drop boards, lists, and
+cards, with live multi-user sync, granular per-person permissions, and
+both workspace-wide and single-board shareable invite links. Built as a
+clean, well-structured full-stack TypeScript monorepo, not a
+distributed-systems showcase (see
 [`resilient-stack`](https://github.com/Lajat/resilient-stack) for that side
 of the portfolio instead).
 
@@ -15,9 +16,21 @@ of the portfolio instead).
   password
 - **Workspaces** — create a workspace, invite teammates via a shareable
   link, owner-controlled membership
-- **Granular permissions** — per-member `canAdd`/`canEdit`/`canDelete`,
-  independently settable by the workspace owner (not just a binary
-  member/owner split)
+- **Board guests** — invite someone to a single board without giving them
+  workspace access at all, by email or by a per-board shareable link; they
+  see only that one board, never the workspace's name, its other boards,
+  or its member list
+- **Granular permissions** — three named access levels (Viewer,
+  Contributor, Full access) layered over per-person `canAdd`/`canEdit`/
+  `canDelete` flags, settable by the workspace owner or an Admin (a member
+  explicitly granted permission-management rights, short of full
+  ownership); board guests are capped at Contributor, since Full access
+  would let someone outside the workspace delete cards on a board they
+  don't otherwise belong to
+- **Notifications** — invitations, access changes, and board/workspace
+  activity surface in a notification bell with read/unread state,
+  per-item mark-as-read that doesn't force navigation away from what
+  you're doing, and snoozing
 - **Boards → Lists → Cards** — full CRUD, drag-and-drop reordering both
   within a list and across lists, with a database-level guard against a
   card ending up recorded in two lists at once
@@ -73,7 +86,7 @@ the sidebar, and a deleted workspace staying stale there too):
 ```mermaid
 flowchart LR
     subgraph Board room
-        A["card:moved<br/>card:created<br/>comment:added"]
+        A["card:moved<br/>card:created<br/>comment:added<br/>board:guest-added<br/>board:guest-removed"]
     end
     subgraph Workspace room
         B["board:created<br/>board:deleted"]
