@@ -1,5 +1,5 @@
 /**
- * Central API client for talking to the fluxboard backend.
+ * Central API client for talking to the boardwright backend.
  *
  * Every frontend call to the API should go through `apiFetch` rather than
  * calling `fetch` directly — this is the one place that:

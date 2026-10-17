@@ -33,13 +33,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build shared-types
-        run: pnpm --filter @fluxboard/shared-types build
+        run: pnpm --filter @boardwright/shared-types build
 
       - name: Build API
-        run: pnpm --filter @fluxboard/api build
+        run: pnpm --filter @boardwright/api build
 
       - name: Typecheck web (Next.js build)
-        run: pnpm --filter @fluxboard/web build
+        run: pnpm --filter @boardwright/web build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:4000
           NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
@@ -50,7 +50,7 @@ jobs:
       - name: Run API server and integration tests
         run: |
           # 1. Start the API server in the background
-          pnpm --filter @fluxboard/api dev &
+          pnpm --filter @boardwright/api dev &
           API_PID=$!
 
           # 2. Wait until the server is responding on port 4000
@@ -61,13 +61,13 @@ jobs:
           echo "API server is up and running!"
 
           # 3. Run the integration tests
-          pnpm --filter @fluxboard/api test:integration
+          pnpm --filter @boardwright/api test:integration
 
           # 4. Clean up the background server process
           kill $API_PID
         env:
           TEST_BASE_URL: http://localhost:4000
-          MONGODB_URI: mongodb://localhost:27017/fluxboard-test
+          MONGODB_URI: mongodb://localhost:27017/boardwright-test
           JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
           JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
 
@@ -91,7 +91,7 @@ jobs:
         run: |
           # Replace any slashes in the ref name with hyphens (e.g., 7/merge -> 7-merge)
           SAFE_REF=$(echo "${{ github.ref_name }}" | tr '/' '-')
-          echo "VERSION_LABEL=fluxboard-$SAFE_REF" >> $GITHUB_ENV
+          echo "VERSION_LABEL=boardwright-$SAFE_REF" >> $GITHUB_ENV
 
       - name: Package deployment bundle
         run: |
@@ -104,8 +104,8 @@ jobs:
         with:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: fluxboard-api
-          environment_name: fluxboard-api-env
+          application_name: boardwright-api
+          environment_name: boardwright-api-env
           region: ${{ secrets.AWS_REGION }}
           version_label: ${{ env.VERSION_LABEL }}
           deployment_package: deploy.zip

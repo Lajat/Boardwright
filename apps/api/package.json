@@ -1,5 +1,5 @@
 {
-  "name": "@fluxboard/api",
+  "name": "@boardwright/api",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -10,7 +10,7 @@
     "test:integration": "node --import tsx test/auth.integration.ts"
   },
   "dependencies": {
-    "@fluxboard/shared-types": "workspace:*",
+    "@boardwright/shared-types": "workspace:*",
     "express": "^4.19.2",
     "mongoose": "^8.5.0",
     "socket.io": "^4.7.5",

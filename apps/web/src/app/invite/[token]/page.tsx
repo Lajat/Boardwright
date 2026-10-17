@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { CheckIcon, LayoutIcon, SpinnerIcon } from "@/components/ui/icons";
-import type { InvitePreview } from "@fluxboard/shared-types";
+import type { InvitePreview } from "@boardwright/shared-types";
 import { APP_NAME } from "@/lib/constants";
 
 type InviteAction = "accept" | "decline" | "snooze";

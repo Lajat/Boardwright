@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { NotificationModel } from "../models/Notification";
-import { SocketEvents } from "@fluxboard/shared-types";
+import { SocketEvents } from "@boardwright/shared-types";
 import { InvitationModel } from "../models/Invitation";
-import type { Notification } from "@fluxboard/shared-types";
+import type { Notification } from "@boardwright/shared-types";
 
 function toNotificationResponse(doc: any): Notification {
   return {

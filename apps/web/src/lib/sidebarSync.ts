@@ -1,6 +1,6 @@
-import type { Board, Workspace } from "@fluxboard/shared-types";
+import type { Board, Workspace } from "@boardwright/shared-types";
 
-export const SIDEBAR_SYNC_EVENT = "fluxboard:sidebar-sync";
+export const SIDEBAR_SYNC_EVENT = "boardwright:sidebar-sync";
 
 export type SidebarSyncDetail =
   | { type: "workspace-upserted"; workspace: Workspace }

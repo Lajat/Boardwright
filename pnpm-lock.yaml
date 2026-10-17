@@ -14,7 +14,7 @@ importers:
 
   apps/api:
     dependencies:
-      '@fluxboard/shared-types':
+      '@boardwright/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
       bcrypt:
@@ -96,7 +96,7 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@18.3.1)
-      '@fluxboard/shared-types':
+      '@boardwright/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
       next:

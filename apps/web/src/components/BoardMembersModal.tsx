@@ -8,7 +8,7 @@ import { emailError } from "@/lib/validation";
 import { CheckIcon, CrownIcon, LinkIcon, SearchIcon, SpinnerIcon, TrashIcon, UserPlusIcon } from "./ui/icons";
 import { buildAccessList, type AccessLevel } from "@/lib/access";
 import { detectWorkspacePreset, detectGuestPreset, workspaceRoleLabel } from "@/lib/permissionPresets";
-import type { BoardGuest, WorkspaceMember } from "@fluxboard/shared-types";
+import type { BoardGuest, WorkspaceMember } from "@boardwright/shared-types";
 
 type AccessFilter = "total" | "viewing";
 

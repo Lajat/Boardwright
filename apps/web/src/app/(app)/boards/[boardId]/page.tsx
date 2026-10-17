@@ -50,7 +50,7 @@ import {
   type Workspace,
   type WorkspaceMember,
   type BoardGuest,
-} from "@fluxboard/shared-types";
+} from "@boardwright/shared-types";
 import {
   SocketEvents,
   type CardMovedPayload,
@@ -59,7 +59,7 @@ import {
   type BoardGuestAddedPayload,
   type BoardGuestRemovedPayload,
   type AccessRevokedPayload,
-} from "@fluxboard/shared-types";
+} from "@boardwright/shared-types";
 
 /**
  * Local shape for a list plus its resolved cards, in on-screen order.
@@ -225,7 +225,7 @@ export default function BoardPage() {
   // board has already shown it earlier in the session.
   useEffect(() => {
     if (!canScrollRight || !boardId) return;
-    const key = `fluxboard_swipe_hint_${boardId}`;
+    const key = `boardwright_swipe_hint_${boardId}`;
     if (sessionStorage.getItem(key)) return;
 
     setShowSwipeHint(true);

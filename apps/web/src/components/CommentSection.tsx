@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { getSocket } from "@/lib/socket";
 import { avatarColorFor, initialsFor } from "@/lib/avatar";
-import { SocketEvents, type Comment } from "@fluxboard/shared-types";
+import { SocketEvents, type Comment } from "@boardwright/shared-types";
 
 interface CommentSectionProps {
   cardId: string;

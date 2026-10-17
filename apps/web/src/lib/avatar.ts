@@ -25,7 +25,7 @@ export function avatarColorFor(seed: string): string {
   return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
 }
 
-/** "Lajat Sharma" -> "LS", "fluxboard" -> "F", "" -> "?" */
+/** "Lajat Sharma" -> "LS", "boardwright" -> "F", "" -> "?" */
 export function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";

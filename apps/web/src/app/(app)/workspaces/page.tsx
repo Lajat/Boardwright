@@ -25,13 +25,13 @@ import {
   ListIcon,
 } from "@/components/ui/icons";
 import { ProfileMenu } from "@/components/ProfileMenu";
-import type { Workspace } from "@fluxboard/shared-types";
+import type { Workspace } from "@boardwright/shared-types";
 import {
   SocketEvents,
   type WorkspaceMembershipPayload,
   type AccessRevokedPayload,
   type MemberPermissionsUpdatedPayload,
-} from "@fluxboard/shared-types";
+} from "@boardwright/shared-types";
 
 export default function WorkspacesPage() {
   const { user, accessToken, isLoading: authLoading } = useAuth();
@@ -55,19 +55,19 @@ export default function WorkspacesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"name" | "created">(() => {
     if (typeof window === "undefined") return "name";
-    const stored = window.localStorage.getItem("fluxboard:workspaces-sort-order");
+    const stored = window.localStorage.getItem("boardwright:workspaces-sort-order");
     return stored === "created" ? "created" : "name";
   });
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
-    const stored = window.localStorage.getItem("fluxboard:workspaces-view-mode");
+    const stored = window.localStorage.getItem("boardwright:workspaces-view-mode");
     return stored === "list" ? "list" : "grid";
   });
   const [deletingWorkspace, setDeletingWorkspace] = useState<Workspace | null>(null);
 
   useEffect(() => {
-    window.localStorage.setItem("fluxboard:workspaces-sort-order", sortOrder);
-    window.localStorage.setItem("fluxboard:workspaces-view-mode", viewMode);
+    window.localStorage.setItem("boardwright:workspaces-sort-order", sortOrder);
+    window.localStorage.setItem("boardwright:workspaces-view-mode", viewMode);
   }, [sortOrder, viewMode]);
   const deletedWorkspaceIds = useRef(new Set<string>());
   const createWorkspaceInFlight = useRef(false);
@@ -132,12 +132,12 @@ export default function WorkspacesPage() {
       setSearchQuery("");
     }
 
-    window.addEventListener("fluxboard:create-workspace", openCreateWorkspace);
+    window.addEventListener("boardwright:create-workspace", openCreateWorkspace);
     if (new URLSearchParams(window.location.search).get("create") === "1") {
       openCreateWorkspace();
       router.replace("/workspaces", { scroll: false });
     }
-    return () => window.removeEventListener("fluxboard:create-workspace", openCreateWorkspace);
+    return () => window.removeEventListener("boardwright:create-workspace", openCreateWorkspace);
   }, [router]);
 
   // If someone adds this user to a workspace while they're sitting on this

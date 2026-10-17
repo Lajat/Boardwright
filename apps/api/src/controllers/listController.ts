@@ -2,8 +2,8 @@ import { Request, Response } from "express";
 import { ListModel } from "../models/List";
 import { BoardModel } from "../models/Board";
 import { CardModel } from "../models/Card";
-import type { List } from "@fluxboard/shared-types";
-import { SocketEvents } from "@fluxboard/shared-types";
+import type { List } from "@boardwright/shared-types";
+import { SocketEvents } from "@boardwright/shared-types";
 import { resolveBoardAccessById } from "../lib/permissions";
 
 /** Converts a Mongoose ListDocument into the shared `List` shape. */

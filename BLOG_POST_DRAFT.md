@@ -1,11 +1,11 @@
 # The bug that only showed up in the tab that fixed it
 
-*A debugging story from building [fluxboard](https://github.com/Lajat/fluxboard), a real-time
+*A debugging story from building [boardwright](https://github.com/Lajat/boardwright), a real-time
 collaborative Kanban board.*
 
 ## The setup
 
-fluxboard syncs board changes across every open tab in real time, using
+boardwright syncs board changes across every open tab in real time, using
 Socket.io. Drag a card to another column, and everyone else looking at that
 board sees it move — no refresh needed.
 
@@ -28,7 +28,7 @@ Something was different about being the tab that *initiated* the action.
 
 ## What's actually racing
 
-Creating a card in fluxboard does two things on the backend, in this order:
+Creating a card in boardwright does two things on the backend, in this order:
 
 ```javascript
 const cardResponse = toCardResponse(card);

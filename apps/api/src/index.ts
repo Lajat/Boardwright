@@ -8,7 +8,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { connectToDatabase } from "./config/database";
 import { WorkspaceModel } from "./models/Workspace";
 import { BoardModel } from "./models/Board";
-import { SocketEvents } from "@fluxboard/shared-types";
+import { SocketEvents } from "@boardwright/shared-types";
 import authRoutes from "./routes/authRoutes";
 import workspaceRoutes from "./routes/workspaceRoutes";
 import boardRoutes from "./routes/boardRoutes";
@@ -192,7 +192,7 @@ function getUserIdFromSocketTicket(ticket: string): string | undefined {
   try {
     const secret = process.env.JWT_ACCESS_SECRET;
     if (!secret) return undefined;
-    const decoded = jwt.verify(ticket, secret, { audience: "fluxboard-socket" }) as {
+    const decoded = jwt.verify(ticket, secret, { audience: "boardwright-socket" }) as {
       userId?: unknown;
       purpose?: unknown;
     };

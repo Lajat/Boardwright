@@ -104,7 +104,7 @@ export default function AboutPage() {
           <p>© {new Date().getFullYear()} {APP_NAME}. Open source under the MIT License.</p>
           <div className="flex items-center gap-4">
             <a
-              href="https://github.com/Lajat/Fluxboard"
+              href="https://github.com/Lajat/Boardwright"
               target="_blank"
               rel="noreferrer"
               className="font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"

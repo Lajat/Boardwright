@@ -3,8 +3,8 @@ import { Types } from "mongoose";
 import { CardModel } from "../models/Card";
 import { ListModel } from "../models/List";
 import { BoardModel } from "../models/Board";
-import type { Card } from "@fluxboard/shared-types";
-import { SocketEvents } from "@fluxboard/shared-types";
+import type { Card } from "@boardwright/shared-types";
+import { SocketEvents } from "@boardwright/shared-types";
 import { resolveListAccess } from "../lib/permissions";
 import { generateKeyPrefix } from "../lib/taskId";
 
@@ -28,7 +28,7 @@ function validateDueDate(dueDate: unknown): string | null {
 
 /**
  * Converts a Mongoose CardDocument into the plain `Card` shape defined in
- * @fluxboard/shared-types — the shape actually sent over the wire to the
+ * @boardwright/shared-types — the shape actually sent over the wire to the
  * frontend. Keeping this conversion in one function means there's a single
  * place to update if the wire format needs to change, rather than repeating
  * the same `{ id: doc._id.toString(), ... }` mapping in every handler below.

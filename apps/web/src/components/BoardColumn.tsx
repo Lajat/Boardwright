@@ -7,7 +7,7 @@ import { TaskCard } from "./TaskCard";
 import { EditableTitle } from "./ui/EditableTitle";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { PlusIcon, TrashIcon, XIcon } from "./ui/icons";
-import type { Card, WorkspaceMember } from "@fluxboard/shared-types";
+import type { Card, WorkspaceMember } from "@boardwright/shared-types";
 
 interface BoardColumnProps {
   listId: string;

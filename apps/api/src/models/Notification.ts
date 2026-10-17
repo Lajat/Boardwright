@@ -1,5 +1,5 @@
 import { Schema, model, Document, Types } from "mongoose";
-import type { NotificationType } from "@fluxboard/shared-types";
+import type { NotificationType } from "@boardwright/shared-types";
 
 /** Mongoose document shape for a persisted notification. */
 export interface NotificationDocument extends Document {

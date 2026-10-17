@@ -15,11 +15,11 @@ RUN pnpm install --frozen-lockfile
 COPY packages/shared-types ./packages/shared-types
 COPY apps/api ./apps/api
 
-RUN pnpm --filter @fluxboard/shared-types build
-RUN pnpm --filter @fluxboard/api build
+RUN pnpm --filter @boardwright/shared-types build
+RUN pnpm --filter @boardwright/api build
 
 # Create a standalone production deployment
-RUN pnpm --filter @fluxboard/api deploy --prod --legacy /out/api
+RUN pnpm --filter @boardwright/api deploy --prod --legacy /out/api
 
 
 # Runtime image
