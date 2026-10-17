@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/apiClient";
 import { disconnectSocket, getSocket } from "@/lib/socket";
-import type { User } from "@fluxboard/shared-types";
+import type { User } from "@boardwright/shared-types";
 import { getPostAuthRedirect } from "@/lib/authRedirect";
 
 interface AuthContextValue {

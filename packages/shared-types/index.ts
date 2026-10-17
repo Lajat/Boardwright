@@ -1,9 +1,9 @@
 /**
- * Shared domain types for fluxboard.
+ * Shared domain types for boardwright.
  *
  * Both `apps/web` (Next.js frontend) and `apps/api` (Express backend) import
  * from this package instead of each defining their own copy of these shapes.
- * This is the main reason fluxboard is a monorepo rather than two separate
+ * This is the main reason boardwright is a monorepo rather than two separate
  * repos: a `Card` on the backend and a `Card` on the frontend are always
  * guaranteed to match, because they're literally the same type definition.
  *
@@ -12,7 +12,7 @@
  * package buys you.
  */
 
-/** A registered user of fluxboard. */
+/** A registered user of boardwright. */
 export interface User {
   id: string;
   email: string;

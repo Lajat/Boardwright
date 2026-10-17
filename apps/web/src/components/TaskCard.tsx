@@ -4,8 +4,8 @@ import { forwardRef, type CSSProperties, type HTMLAttributes, type SyntheticEven
 import { useDndContext } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Card, LabelColor, WorkspaceMember } from "@fluxboard/shared-types";
-import { PRIORITY_META } from "@fluxboard/shared-types";
+import type { Card, LabelColor, WorkspaceMember } from "@boardwright/shared-types";
+import { PRIORITY_META } from "@boardwright/shared-types";
 import { TrashIcon, CalendarIcon } from "./ui/icons";
 import { LABEL_SWATCH, PRIORITY_PILL } from "./CardDetailModal";
 import { avatarColorFor, initialsFor } from "@/lib/avatar";

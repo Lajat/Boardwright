@@ -12,7 +12,7 @@ import {
   workspaceRoleLabel,
   type PermissionPreset,
 } from "@/lib/permissionPresets";
-import type { WorkspaceMember, WorkspacePermissions } from "@fluxboard/shared-types";
+import type { WorkspaceMember, WorkspacePermissions } from "@boardwright/shared-types";
 
 type PermissionAxis = "Boards" | "Cards";
 type PermissionAction = "Add" | "Edit" | "Delete";
@@ -273,7 +273,7 @@ export function MembersModal({
               {touched && validationError && <p className="text-xs text-red-600">{validationError}</p>}
               {inviteError && <p className="text-xs text-red-600">{inviteError}</p>}
               <p className="mt-0.5 text-xs text-slate-400">
-                They need an existing fluxboard account and must accept the invitation first.
+                They need an existing boardwright account and must accept the invitation first.
               </p>
             </form>
           </div>

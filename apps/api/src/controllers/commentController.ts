@@ -3,8 +3,8 @@ import { CommentModel } from "../models/Comment";
 import { CardModel } from "../models/Card";
 import { ListModel } from "../models/List";
 import { UserModel } from "../models/User";
-import type { Comment } from "@fluxboard/shared-types";
-import { SocketEvents } from "@fluxboard/shared-types";
+import type { Comment } from "@boardwright/shared-types";
+import { SocketEvents } from "@boardwright/shared-types";
 import { resolveListAccess } from "../lib/permissions";
 
 /** Converts a Mongoose CommentDocument into the shared `Comment` shape. */

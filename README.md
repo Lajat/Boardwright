@@ -1,4 +1,4 @@
-# Fluxboard
+# Boardwright
 
 A real-time collaborative Kanban board: drag-and-drop boards, lists, and
 cards, with live multi-user sync, granular per-person permissions, and
@@ -8,7 +8,7 @@ distributed-systems showcase (see
 [`resilient-stack`](https://github.com/Lajat/resilient-stack) for that side
 of the portfolio instead).
 
-**Live:** [fluxboard.vercel.app](https://fluxboard.vercel.app)
+**Live:** [boardwright-sigma.vercel.app](https://boardwright-sigma.vercel.app)
 
 ## Features
 
@@ -108,7 +108,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    Root["fluxboard/ (pnpm workspace root)"]
+    Root["boardwright/ (pnpm workspace root)"]
     Web["apps/web<br/>Next.js + TypeScript + Tailwind"]
     Api["apps/api<br/>Node/Express + TypeScript + Socket.io"]
     Shared["packages/shared-types<br/>Card, Board, List, User, Comment, SocketEvents"]

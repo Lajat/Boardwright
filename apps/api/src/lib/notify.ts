@@ -1,6 +1,6 @@
 import { NotificationModel } from "../models/Notification";
-import { SocketEvents } from "@fluxboard/shared-types";
-import type { Notification } from "@fluxboard/shared-types";
+import { SocketEvents } from "@boardwright/shared-types";
+import type { Notification } from "@boardwright/shared-types";
 
 /** Converts a Mongoose NotificationDocument into the shared `Notification` shape. */
 function toNotificationResponse(doc: any): Notification {

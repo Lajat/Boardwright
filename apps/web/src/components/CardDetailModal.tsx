@@ -12,7 +12,7 @@ import {
   type LabelColor,
   type Priority,
   type WorkspaceMember,
-} from "@fluxboard/shared-types";
+} from "@boardwright/shared-types";
 
 export interface CardUpdates {
   title: string;

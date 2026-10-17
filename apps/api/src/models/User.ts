@@ -4,7 +4,7 @@ import { Schema, model, Document } from "mongoose";
  * Mongoose document shape for a User.
  *
  * This mirrors (but is not identical to) the `User` type in
- * `@fluxboard/shared-types` — the shared type is the *API contract* sent
+ * `@boardwright/shared-types` — the shared type is the *API contract* sent
  * over the wire (no password hash, string id instead of ObjectId), while
  * this schema is the *storage shape* (includes passwordHash, uses Mongo's
  * native _id). Keeping these separate on purpose: the API response type

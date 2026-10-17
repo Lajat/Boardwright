@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { getSocket } from "@/lib/socket";
 import { BellIcon, CheckIcon, ClockIcon, LayoutIcon, XIcon } from "./ui/icons";
-import { SocketEvents, type Notification } from "@fluxboard/shared-types";
+import { SocketEvents, type Notification } from "@boardwright/shared-types";
 
 type NotificationTab = "actionable" | "updates";
 type InviteAction = "accept" | "decline" | "snooze";

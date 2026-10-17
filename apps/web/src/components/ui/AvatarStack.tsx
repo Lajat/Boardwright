@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { avatarColorFor, initialsFor } from "@/lib/avatar";
 import { buildAccessList } from "@/lib/access";
-import type { BoardGuest, WorkspaceMember } from "@fluxboard/shared-types";
+import type { BoardGuest, WorkspaceMember } from "@boardwright/shared-types";
 
 interface AvatarStackProps {
   members: WorkspaceMember[];

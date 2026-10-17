@@ -98,7 +98,7 @@ async function run() {
   assert.match(ticketBody.ticket, /^[\w-]+\.[\w-]+\.[\w-]+$/, "expected a signed socket ticket");
   const ticketClaims = JSON.parse(Buffer.from(ticketBody.ticket.split(".")[1], "base64url").toString());
   assert.strictEqual(ticketClaims.purpose, "socket");
-  assert.strictEqual(ticketClaims.aud, "fluxboard-socket");
+  assert.strictEqual(ticketClaims.aud, "boardwright-socket");
   assert.ok(ticketClaims.exp > Math.floor(Date.now() / 1000), "socket ticket should expire in the future");
   console.log("✓ POST /auth/socket-ticket issues a short-lived authenticated ticket");
 

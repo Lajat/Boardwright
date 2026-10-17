@@ -26,13 +26,13 @@ import {
   GridIcon,
   ListIcon,
 } from "@/components/ui/icons";
-import type { Board, Workspace, WorkspaceMember, WorkspacePermissions } from "@fluxboard/shared-types";
+import type { Board, Workspace, WorkspaceMember, WorkspacePermissions } from "@boardwright/shared-types";
 import {
   SocketEvents,
   type WorkspaceMembershipPayload,
   type MemberPermissionsUpdatedPayload,
   type AccessRevokedPayload,
-} from "@fluxboard/shared-types";
+} from "@boardwright/shared-types";
 
 // A small rotating set of gradients for board tile headers — purely
 // cosmetic, but it makes a grid of same-shaped tiles easy to tell apart
@@ -70,20 +70,20 @@ export default function WorkspaceBoardsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"name" | "created">(() => {
     if (typeof window === "undefined") return "name";
-    const stored = window.localStorage.getItem(`fluxboard:workspace-sort-order:${workspaceId}`);
+    const stored = window.localStorage.getItem(`boardwright:workspace-sort-order:${workspaceId}`);
     return stored === "created" ? "created" : "name";
   });
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
-    const stored = window.localStorage.getItem(`fluxboard:workspace-view-mode:${workspaceId}`);
+    const stored = window.localStorage.getItem(`boardwright:workspace-view-mode:${workspaceId}`);
     return stored === "list" ? "list" : "grid";
   });
   const createBoardInFlight = useRef(false);
 
   useEffect(() => {
     if (!workspaceId) return;
-    window.localStorage.setItem(`fluxboard:workspace-sort-order:${workspaceId}`, sortOrder);
-    window.localStorage.setItem(`fluxboard:workspace-view-mode:${workspaceId}`, viewMode);
+    window.localStorage.setItem(`boardwright:workspace-sort-order:${workspaceId}`, sortOrder);
+    window.localStorage.setItem(`boardwright:workspace-view-mode:${workspaceId}`, viewMode);
   }, [sortOrder, viewMode, workspaceId]);
   const [deletingBoard, setDeletingBoard] = useState<Board | null>(null);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);

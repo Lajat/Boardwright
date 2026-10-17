@@ -7,8 +7,8 @@ import { UserModel } from "../models/User";
 import { WorkspaceModel } from "../models/Workspace";
 import { DEFAULT_GUEST_CARD_PERMISSIONS, isWorkspaceMember } from "../lib/permissions";
 import { notificationResponse, notifyUser } from "../lib/notify";
-import type { InvitePreview, Workspace, WorkspaceMember } from "@fluxboard/shared-types";
-import { SocketEvents } from "@fluxboard/shared-types";
+import type { InvitePreview, Workspace, WorkspaceMember } from "@boardwright/shared-types";
+import { SocketEvents } from "@boardwright/shared-types";
 
 const SNOOZE_DURATION_MS = 24 * 60 * 60 * 1000;
 

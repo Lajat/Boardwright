@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { UserModel } from "../models/User";
-import type { User } from "@fluxboard/shared-types";
+import type { User } from "@boardwright/shared-types";
 
 const SALT_ROUNDS = 10;
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes — sent with every request
@@ -20,7 +20,7 @@ const authCookieOptions = isProd
 
 /**
  * Converts a Mongoose UserDocument into the public `User` shape from
- * @fluxboard/shared-types — deliberately excludes passwordHash, so it's
+ * @boardwright/shared-types — deliberately excludes passwordHash, so it's
  * structurally impossible to accidentally leak it in an API response by
  * forgetting to strip a field somewhere.
  */
@@ -236,7 +236,7 @@ export function createSocketTicket(req: Request, res: Response) {
   const ticket = jwt.sign(
     { userId: req.userId, purpose: "socket" },
     secret,
-    { expiresIn: SOCKET_TICKET_TTL_SECONDS, audience: "fluxboard-socket" }
+    { expiresIn: SOCKET_TICKET_TTL_SECONDS, audience: "boardwright-socket" }
   );
   res.set("Cache-Control", "no-store");
   res.json({ ticket });

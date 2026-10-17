@@ -1,4 +1,4 @@
-import type { BoardGuest, WorkspaceMember } from "@fluxboard/shared-types";
+import type { BoardGuest, WorkspaceMember } from "@boardwright/shared-types";
 
 export type AccessLevel = "owner" | "member" | "guest";
 

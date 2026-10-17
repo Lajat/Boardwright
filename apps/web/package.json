@@ -1,5 +1,5 @@
 {
-  "name": "@fluxboard/web",
+  "name": "@boardwright/web",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -10,7 +10,7 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "@fluxboard/shared-types": "workspace:*",
+    "@boardwright/shared-types": "workspace:*",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

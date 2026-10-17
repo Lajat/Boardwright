@@ -25,14 +25,14 @@ import {
   SearchIcon,
   InfoIcon,
 } from "./icons";
-import type { Board, Workspace } from "@fluxboard/shared-types";
+import type { Board, Workspace } from "@boardwright/shared-types";
 import {
   SocketEvents,
   type WorkspaceMembershipPayload,
   type AccessRevokedPayload,
-} from "@fluxboard/shared-types";
+} from "@boardwright/shared-types";
 
-const COLLAPSE_STORAGE_KEY = "fluxboard_sidebar_collapsed";
+const COLLAPSE_STORAGE_KEY = "boardwright_sidebar_collapsed";
 
 /**
  * Persistent navigation for every authenticated page: a searchable
@@ -376,7 +376,7 @@ export function Sidebar() {
     setIsWorkspaceMenuOpen(false);
     if (pathname === "/workspaces") {
       e.preventDefault();
-      window.dispatchEvent(new Event("fluxboard:create-workspace"));
+      window.dispatchEvent(new Event("boardwright:create-workspace"));
     }
   }
 
@@ -683,7 +683,7 @@ export function Sidebar() {
         <div className="space-y-1 border-t border-slate-100 p-2">
           <Link
             href="/about"
-            title="About Fluxboard"
+            title="About Boardwright"
             aria-current={pathname === "/about" ? "page" : undefined}
             onClick={() => setIsMobileOpen(false)}
             className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm ${
@@ -693,7 +693,7 @@ export function Sidebar() {
             }`}
           >
             <InfoIcon className="h-4 w-4 shrink-0" />
-            {!isEffectivelyCollapsed && <span className="truncate">About Fluxboard</span>}
+            {!isEffectivelyCollapsed && <span className="truncate">About Boardwright</span>}
           </Link>
           <button
             onClick={logout}
