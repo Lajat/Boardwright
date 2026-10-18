@@ -4,7 +4,8 @@ import { useState, FormEvent } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { emailError as getEmailError } from "@/lib/validation";
-import { LayoutIcon, SpinnerIcon, LinkIcon, CheckIcon } from "@/components/ui/icons";
+import { SpinnerIcon, LinkIcon, CheckIcon } from "@/components/ui/icons";
+import { Logo } from "@/components/ui/Logo";
 import { APP_NAME } from "@/lib/constants";
 
 /**
@@ -65,9 +66,7 @@ export default function ForgotPasswordPage() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-brand-50 via-slate-50 to-slate-50 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-sm">
-            <LayoutIcon className="h-6 w-6" />
-          </div>
+          <Logo size={44} />
           <span className="text-sm font-semibold tracking-tight text-slate-400">{APP_NAME}</span>
         </div>
 

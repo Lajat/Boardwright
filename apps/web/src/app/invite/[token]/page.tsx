@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { CheckIcon, LayoutIcon, SpinnerIcon } from "@/components/ui/icons";
+import { Logo } from "@/components/ui/Logo";
 import type { InvitePreview } from "@boardwright/shared-types";
 import { APP_NAME } from "@/lib/constants";
 
@@ -67,9 +68,7 @@ export default function InvitePage() {
       <div className="pointer-events-none absolute -bottom-28 -right-20 h-96 w-96 rounded-full bg-indigo-500/20 blur-3xl" />
       <section className="relative w-full max-w-lg">
         <div className="mb-6 flex items-center justify-center gap-2 text-sm font-semibold tracking-tight text-white/70">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-white shadow-lg shadow-brand-950/30">
-            <LayoutIcon className="h-5 w-5" />
-          </span>
+          <Logo size={36} bgClassName="bg-brand-500" className="shadow-lg shadow-brand-950/30" />
           {APP_NAME}
         </div>
 

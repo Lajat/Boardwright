@@ -12,8 +12,8 @@ import { getSocket } from "@/lib/socket";
 import { SIDEBAR_SYNC_EVENT, type SidebarSyncDetail } from "@/lib/sidebarSync";
 import { APP_NAME } from "@/lib/constants";
 import { avatarColorFor, initialsFor } from "@/lib/avatar";
+import { Logo } from "./Logo";
 import {
-  LayoutIcon,
   FolderIcon,
   ChevronDownIcon,
   MenuIcon,
@@ -408,9 +408,7 @@ export function Sidebar() {
           <MenuIcon className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-600 text-white">
-            <LayoutIcon className="h-3.5 w-3.5" />
-          </div>
+          <Logo size={24} />
           <span className="text-sm font-semibold text-slate-800">{APP_NAME}</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -442,9 +440,7 @@ export function Sidebar() {
             <>
               <div className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-1 pb-2">
                 <Link href="/workspaces" title={APP_NAME} className="flex items-center">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
-                    <LayoutIcon className="h-4 w-4" />
-                  </div>
+                  <Logo size={24} />
                 </Link>
                 <button
                   onClick={toggleCollapsed}
@@ -463,9 +459,7 @@ export function Sidebar() {
           ) : (
             <>
               <Link href="/workspaces" className="flex min-w-0 items-center gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
-                  <LayoutIcon className="h-4 w-4" />
-                </div>
+                <Logo size={32} />
                 <span className="truncate text-sm font-semibold text-slate-800">{APP_NAME}</span>
               </Link>
               <div className="ml-auto hidden items-center sm:flex">
