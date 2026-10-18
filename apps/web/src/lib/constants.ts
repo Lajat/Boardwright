@@ -1,5 +1,5 @@
 /** Shared app display name, kept consistent across the interface. */
-export const APP_NAME = "Fluxboard";
+export const APP_NAME = "Boardwright";
 
 /** Keep in sync with the web package version. */
-export const APP_VERSION = "1.4.2";
+export const APP_VERSION = "1.4.4";

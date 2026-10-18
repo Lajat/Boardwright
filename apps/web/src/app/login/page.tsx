@@ -6,7 +6,8 @@ import { useAuth } from "@/context/AuthContext";
 import { ApiError } from "@/lib/apiClient";
 import { emailError as getEmailError } from "@/lib/validation";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { LayoutIcon, SpinnerIcon } from "@/components/ui/icons";
+import { SpinnerIcon } from "@/components/ui/icons";
+import { Logo } from "@/components/ui/Logo";
 import { APP_NAME } from "@/lib/constants";
 import { AuthPageRedirect } from "@/components/AuthPageRedirect";
 
@@ -51,9 +52,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-brand-50 via-slate-50 to-slate-50 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-sm">
-            <LayoutIcon className="h-6 w-6" />
-          </div>
+          <Logo size={44} />
           <span className="text-sm font-semibold tracking-tight text-slate-400">{APP_NAME}</span>
         </div>
 

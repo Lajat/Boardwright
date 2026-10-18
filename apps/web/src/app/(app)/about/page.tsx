@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { APP_NAME, APP_VERSION } from "@/lib/constants";
-import { LayoutIcon } from "@/components/ui/icons";
 
 const features = [
   {
@@ -46,9 +45,13 @@ export default function AboutPage() {
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:px-10">
         <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
-              <LayoutIcon className="h-6 w-6" />
-            </div>
+            {/* The fixed brand mark — same file as the README banner
+                (public/brand/logo.svg), baked-in colors rather than the
+                theme-tied <Logo> component used for in-app chrome like the
+                sidebar and login screen. This is the one place in the app
+                itself that's meant to represent the brand as a fixed
+                asset, the same way the README does. */}
+            <img src="/brand/logo.svg" alt={`${APP_NAME} logo`} width={48} height={48} className="shrink-0 rounded-[28%] shadow-sm" />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-brand-700">About</p>
               <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
