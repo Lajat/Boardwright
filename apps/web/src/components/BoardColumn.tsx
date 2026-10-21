@@ -196,7 +196,7 @@ export function BoardColumn({
             <button
               type="submit"
               disabled={isSubmittingCard}
-              className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              className="rounded-lg bg-gradient-to-br from-brand-500 to-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:from-brand-600 hover:to-violet-700 disabled:opacity-50"
             >
               {isSubmittingCard ? "Adding..." : "Add card"}
             </button>

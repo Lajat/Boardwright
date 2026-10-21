@@ -306,7 +306,7 @@ export default function WorkspacesPage() {
                 setCreateError(null);
                 setSearchQuery("");
               }}
-              className="flex min-h-11 w-auto items-center justify-center gap-2 rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+              className="flex min-h-11 w-auto items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-brand-500 to-violet-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm hover:from-brand-600 hover:to-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
               <PlusIcon className="h-4 w-4" />
               New workspace
@@ -578,7 +578,7 @@ export default function WorkspacesPage() {
             <button
               type="submit"
               disabled={isSubmittingWorkspace}
-              className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:cursor-wait disabled:opacity-60"
+              className="rounded-lg bg-gradient-to-br from-brand-500 to-violet-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm hover:from-brand-600 hover:to-violet-700 disabled:cursor-wait disabled:opacity-60"
             >
               {isSubmittingWorkspace ? "Creating..." : "Create workspace"}
             </button>

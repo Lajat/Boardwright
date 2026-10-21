@@ -264,7 +264,7 @@ export function MembersModal({
                 <button
                   type="submit"
                   disabled={isInviting}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-br from-brand-500 to-violet-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:from-brand-600 hover:to-violet-700 disabled:opacity-50"
                 >
                   {isInviting ? <SpinnerIcon className="h-4 w-4" /> : <UserPlusIcon className="h-4 w-4" />}
                   Invite

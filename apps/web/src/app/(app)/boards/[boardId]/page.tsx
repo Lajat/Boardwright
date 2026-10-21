@@ -1399,7 +1399,7 @@ export default function BoardPage() {
                     <button
                       type="submit"
                       disabled={isSubmittingList}
-                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                      className="rounded-lg bg-gradient-to-br from-brand-500 to-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:from-brand-600 hover:to-violet-700"
                     >
                       {isSubmittingList ? "Adding..." : "Add list"}
                     </button>

@@ -1,4 +1,7 @@
-# Boardwright
+<h1 align="center">
+  <img src="assets/brand/logo.svg" alt="Boardwright logo" width="40" height="40" align="absmiddle" />
+  Boardwright
+</h1>
 
 A real-time collaborative Kanban board: drag-and-drop boards, lists, and
 cards, with live multi-user sync, granular per-person permissions, and

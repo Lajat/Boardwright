@@ -68,7 +68,7 @@ export default function InvitePage() {
       <div className="pointer-events-none absolute -bottom-28 -right-20 h-96 w-96 rounded-full bg-indigo-500/20 blur-3xl" />
       <section className="relative w-full max-w-lg">
         <div className="mb-6 flex items-center justify-center gap-2 text-sm font-semibold tracking-tight text-white/70">
-          <Logo size={36} bgClassName="bg-brand-500" className="shadow-lg shadow-brand-950/30" />
+          <Logo size={36} bgClassName="bg-gradient-to-br from-brand-400 to-violet-500" className="shadow-lg shadow-brand-950/30" />
           {APP_NAME}
         </div>
 
@@ -148,7 +148,7 @@ export default function InvitePage() {
                     {user ? (
                       <div className="mt-5 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                         <button type="button" onClick={() => respond("accept")} disabled={isBusy}
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-wait disabled:opacity-60">
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-brand-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-brand-600 hover:to-violet-700 disabled:cursor-wait disabled:opacity-60">
                           {submitting === "accept" && <SpinnerIcon className="h-4 w-4" />} Accept invitation
                         </button>
                         <button type="button" onClick={() => respond("decline")} disabled={isBusy}
@@ -163,7 +163,7 @@ export default function InvitePage() {
                     ) : (
                       <div className="mt-5 grid gap-2 sm:grid-cols-2">
                         <Link href={`/signup?redirect=${encodeURIComponent(`/invite/${token}`)}`}
-                          className="flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700">
+                          className="flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:from-brand-600 hover:to-violet-700">
                           Create an account to respond
                         </Link>
                         <Link href={`/login?redirect=${encodeURIComponent(`/invite/${token}`)}`}

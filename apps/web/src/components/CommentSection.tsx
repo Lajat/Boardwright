@@ -133,7 +133,7 @@ export function CommentSection({ cardId }: CommentSectionProps) {
         <button
           type="submit"
           disabled={isSubmitting || !newBody.trim()}
-          className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-lg bg-gradient-to-br from-brand-500 to-violet-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           Post
         </button>
