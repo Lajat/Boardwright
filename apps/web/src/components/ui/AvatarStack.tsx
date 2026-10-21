@@ -74,24 +74,27 @@ export function AvatarStack({
       }
       className="group flex items-center rounded-full transition hover:opacity-90 disabled:cursor-default"
     >
-      {visible.map((person, index) => (
-        <span
-          key={person.id}
-          title={`${person.displayName}${person.accessLevel === "owner" ? " (owner)" : person.accessLevel === "guest" ? " (board guest)" : ""}${activeMembers.has(person.id) ? " — viewing this board" : ""}`}
-          style={{ zIndex: visible.length - index }}
-          className={`relative flex shrink-0 items-center justify-center rounded-full font-semibold text-white ring-2 ${
-            activeMembers.has(person.id) ? "ring-emerald-500 ring-offset-1" : "ring-white"
-          } ${sizeClass} ${avatarColorFor(person.id)}`}
-        >
-          {initialsFor(person.displayName)}
-        </span>
-      ))}
+      {visible.map((person, index) => {
+        const isActive = activeMembers.has(person.id);
+        return (
+          <span
+            key={person.id}
+            title={`${person.displayName}${person.accessLevel === "owner" ? " (owner)" : person.accessLevel === "guest" ? " (board guest)" : ""}${isActive ? " — viewing this board" : ""}`}
+            style={{ zIndex: visible.length - index }}
+            className={`relative flex shrink-0 items-center justify-center rounded-full font-semibold text-white ring-2 ring-white ${
+              isActive ? "shadow-[0_0_0_4px_rgba(255,255,255,1)] ring-emerald-400 ring-offset-1" : ""
+            } ${sizeClass} ${avatarColorFor(person.id)}`}
+          >
+            {initialsFor(person.displayName)}
+          </span>
+        );
+      })}
       {overflow > 0 && (
         <span
-          className={`relative flex shrink-0 items-center justify-center rounded-full bg-slate-200 font-semibold text-slate-600 ring-2 ${
+          className={`relative flex shrink-0 items-center justify-center rounded-full bg-slate-200 font-semibold text-slate-600 ring-2 ring-white ${
             people.slice(max).some((person) => activeMembers.has(person.id))
-              ? "ring-emerald-500 ring-offset-1"
-              : "ring-white"
+              ? "shadow-[0_0_0_4px_rgba(255,255,255,1)] ring-emerald-400 ring-offset-1"
+              : ""
           } ${sizeClass}`}
           title={`${overflow} more ${overflow === 1 ? "person" : "people"}`}
         >
