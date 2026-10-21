@@ -220,7 +220,7 @@ export function BoardMembersModal({
                 <button
                   type="submit"
                   disabled={isInviting}
-                  className="flex shrink-0 items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br from-brand-500 to-violet-600 px-3.5 py-2.5 text-sm font-semibold text-white transition hover:from-brand-600 hover:to-violet-700 disabled:opacity-60"
                 >
                   {isInviting ? <SpinnerIcon className="h-4 w-4" /> : <UserPlusIcon className="h-4 w-4" />}
                   Invite

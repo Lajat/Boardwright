@@ -19,6 +19,14 @@ module.exports = {
           800: "#3730a3",
           900: "#312e81",
         },
+        // The second color in the logo's gradient (brand-500 -> violet-600)
+        // — a real theme token now, not a one-off hex baked into a single
+        // SVG the way it was before. Used on primary actions (the
+        // "brand moments": log in, sign up, invite, create) so those match
+        // the logo instead of the logo being the one inconsistent thing.
+        violet: {
+          600: "#7c3aed",
+        },
       },
     },
   },

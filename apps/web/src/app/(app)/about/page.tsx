@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { APP_NAME, APP_VERSION } from "@/lib/constants";
+import { Logo } from "@/components/ui/Logo";
 
 const features = [
   {
@@ -104,7 +105,17 @@ export default function AboutPage() {
         </section>
 
         <footer className="mt-8 flex flex-col gap-3 border-t border-slate-200 pt-5 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} {APP_NAME}. Open source under the MIT License.</p>
+          {/* The LIVE component here, not the static /brand/logo.svg used in
+              the header above — on purpose. This is the one spot meant to
+              act like a small site-wide signature (the same role GitHub's
+              own mark plays in its footer): icon only, no name text, and
+              it should keep tracking whatever the app's real theme color
+              is if that ever changes, rather than staying pinned to
+              whatever color happened to be baked into a static image. */}
+          <p className="flex items-center gap-2">
+            <Logo size={20} />
+            <span>© {new Date().getFullYear()} {APP_NAME}. Open source under the MIT License.</span>
+          </p>
           <div className="flex items-center gap-4">
             <a
               href="https://github.com/Lajat/Boardwright"
