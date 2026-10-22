@@ -116,6 +116,13 @@ export default function BoardPage() {
   const [isLoadingBoard, setIsLoadingBoard] = useState(true);
   const [openCard, setOpenCard] = useState<Card | null>(null);
   const [confirmingBoardDelete, setConfirmingBoardDelete] = useState(false);
+  // Deleting from the card's own detail modal already confirms first (see
+  // CardDetailModal's own ConfirmDialog) — this is specifically for the
+  // quick trash icon on the card tile itself, which previously called
+  // handleDeleteCard directly with no "are you sure" at all. Same wording
+  // as the modal's, so it reads as one consistent behavior regardless of
+  // which trash icon someone clicked.
+  const [confirmingDeleteCard, setConfirmingDeleteCard] = useState<Card | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const { setActiveWorkspaceId } = useActiveWorkspace();
 
@@ -1347,7 +1354,7 @@ export default function BoardPage() {
                   .filter((card): card is Card => !!card && matchesCardFilters(card))}
                 members={members}
                 onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
+                onDeleteCard={(cardId) => setConfirmingDeleteCard(cardsById[cardId] ?? null)}
                 onOpenCard={setOpenCard}
                 onRenameList={handleRenameList}
                 onDeleteList={handleDeleteList}
@@ -1506,6 +1513,17 @@ export default function BoardPage() {
         description={`"${board?.title}" and every list and card on it will be permanently deleted.`}
         onCancel={() => setConfirmingBoardDelete(false)}
         onConfirm={handleDeleteBoard}
+      />
+
+      <ConfirmDialog
+        open={!!confirmingDeleteCard}
+        title="Delete this card?"
+        description={`"${confirmingDeleteCard?.title ?? ""}" will be permanently deleted. This can't be undone.`}
+        onCancel={() => setConfirmingDeleteCard(null)}
+        onConfirm={async () => {
+          if (confirmingDeleteCard) await handleDeleteCard(confirmingDeleteCard.id);
+          setConfirmingDeleteCard(null);
+        }}
       />
 
       {user && workspace && !workspace.isBoardGuest && (
