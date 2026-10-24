@@ -12,6 +12,7 @@ import {
   type LabelColor,
   type Priority,
   type WorkspaceMember,
+  type AssignableBoardPerson,
 } from "@boardwright/shared-types";
 
 export interface CardUpdates {
@@ -25,8 +26,19 @@ export interface CardUpdates {
 
 interface CardDetailModalProps {
   card: Card | null;
-  /** Workspace members, used to populate the assignee dropdown — pass an empty array if unavailable (the dropdown then just shows "Unassigned"). */
+  /** Workspace members — kept for anything else in this modal keyed off a real WorkspaceMember, but NOT what the assignee dropdown uses (see assignablePeople). */
   members: WorkspaceMember[];
+  /**
+   * Who the assignee dropdown actually offers — workspace members AND
+   * board guests, for every viewer including a guest themselves. `members`
+   * above is deliberately left empty for a guest viewer elsewhere in the
+   * app to keep the full workspace roster private from them; this is a
+   * separate, narrower list (id/name/avatar only) built specifically to
+   * stay populated for a guest, which is what makes a Contributor-level
+   * guest able to actually set an assignee instead of the dropdown having
+   * no real options and silently falling back to "Unassigned."
+   */
+  assignablePeople: AssignableBoardPerson[];
   onClose: () => void;
   onSave: (cardId: string, updates: CardUpdates) => Promise<void>;
   onDelete: (cardId: string) => Promise<void>;
@@ -90,6 +102,7 @@ const PRIORITY_ORDER: Priority[] = ["low", "medium", "high"];
 export function CardDetailModal({
   card,
   members,
+  assignablePeople,
   onClose,
   onSave,
   onDelete,
@@ -309,9 +322,9 @@ export function CardDetailModal({
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-slate-50 disabled:text-slate-500"
               >
                 <option value="">Unassigned</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.displayName}
+                {assignablePeople.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.displayName}
                   </option>
                 ))}
               </select>

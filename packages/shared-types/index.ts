@@ -101,6 +101,22 @@ export interface WorkspaceMember {
  * about the workspace (not its name, not its other boards, not its
  * member list) — see Board.guestPermissions on the API side.
  */
+/**
+ * A person a card on this board could be assigned to — workspace members
+ * and other board guests alike, trimmed to just the fields an assignee
+ * picker needs. Deliberately not WorkspaceMember or BoardGuest themselves:
+ * those carry email, role and permission data that a guest caller isn't
+ * allowed to see (the same privacy rule that keeps a guest from opening
+ * the full Board access list) — this is the one piece of "who else is on
+ * this board" that's safe and necessary to expose to every caller with any
+ * access at all, member or guest.
+ */
+export interface AssignableBoardPerson {
+  id: string;
+  displayName: string;
+  avatarUrl?: string;
+}
+
 export interface BoardGuest {
   id: string;
   email: string;
