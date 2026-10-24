@@ -50,6 +50,7 @@ import {
   type Workspace,
   type WorkspaceMember,
   type BoardGuest,
+  type AssignableBoardPerson,
 } from "@boardwright/shared-types";
 import {
   SocketEvents,
@@ -134,6 +135,14 @@ export default function BoardPage() {
   }, [board?.workspaceId, setActiveWorkspaceId]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [boardGuests, setBoardGuests] = useState<BoardGuest[]>([]);
+  // Who a card can be assigned to — members AND guests, for EVERY viewer
+  // including guests themselves, unlike `members`/`boardGuests` above
+  // which are deliberately left empty for a guest viewer (see the
+  // isBoardGuest branch below) to keep the full workspace member list
+  // private from them. assignable-people is a separate, narrower endpoint
+  // built specifically to stay open to guest callers — see its own doc
+  // comment in boardController.ts.
+  const [assignablePeople, setAssignablePeople] = useState<AssignableBoardPerson[]>([]);
   const [activeBoardUserIds, setActiveBoardUserIds] = useState<string[]>([]);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [cardSearch, setCardSearch] = useState("");
@@ -336,6 +345,23 @@ export default function BoardPage() {
         }
       });
   }, [accessToken, board?.workspaceId, boardId, showToast]);
+
+  // Powers the assignee picker in CardDetailModal, for every viewer
+  // including a board guest — deliberately independent of the
+  // members/boardGuests fetch above, which is skipped entirely for a guest
+  // to keep the full workspace member list private from them.
+  // assignable-people is a separate, narrower endpoint built to stay open
+  // to guest callers (id/name/avatar only, no email or role).
+  useEffect(() => {
+    if (!accessToken || !boardId) return;
+    apiFetch<{ items: AssignableBoardPerson[] }>(`/boards/${boardId}/assignable-people`, { accessToken })
+      .then((res) => setAssignablePeople(res.items))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status !== 404) {
+          showToast(err.message, "error");
+        }
+      });
+  }, [accessToken, boardId, showToast]);
 
   // Workspace-level real-time awareness: this board can disappear (this
   // exact board deleted, or its whole workspace deleted) or get renamed by
@@ -1500,6 +1526,7 @@ export default function BoardPage() {
       <CardDetailModal
         card={openCard}
         members={members}
+        assignablePeople={assignablePeople}
         onClose={() => setOpenCard(null)}
         onSave={handleSaveCard}
         onDelete={handleDeleteCard}

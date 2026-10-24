@@ -301,6 +301,51 @@ function toBoardGuestResponse(user: any, entry: any): any {
  * Workspace-member-only, same visibility reasoning as the rest of this
  * controller's management endpoints.
  */
+/**
+ * GET /boards/:boardId/assignable-people
+ * Everyone a card on this board could be assigned to — workspace members
+ * AND other board guests, id/name/avatar only. Open to anyone with ANY
+ * access to the board (resolveBoardAccess returning non-null covers both
+ * scopes), unlike listMembers/listBoardGuests which are workspace-member-
+ * only: a guest couldn't previously even see who to assign a card to on a
+ * board they're a legitimate Contributor on, since those two endpoints
+ * both 404 for a guest caller. This is deliberately NOT those two
+ * endpoints with a looser check bolted on — it returns a different,
+ * narrower shape (no email, no role, no permissions) so broadening who can
+ * call it doesn't also broaden what a guest caller learns about everyone
+ * else's access level.
+ */
+export async function listAssignablePeople(req: Request, res: Response) {
+  const { boardId } = req.params;
+
+  const board = await BoardModel.findById(boardId);
+  if (!board) {
+    return res.status(404).json({ error: "board not found" });
+  }
+  const access = await resolveBoardAccess(board, req.userId!);
+  if (!access) {
+    return res.status(404).json({ error: "board not found" });
+  }
+
+  // Loaded independently of `access` on purpose: access.workspace is only
+  // populated when the CALLER themselves is a member (resolveBoardAccess's
+  // "workspace" scope branch) — a guest caller's access has no workspace
+  // attached at all. Without this, a guest would only ever see other
+  // guests in the list, never the workspace members (including the owner)
+  // a card could just as well be assigned to.
+  const workspace = await WorkspaceModel.findById(board.workspaceId);
+  const memberIds = workspace ? workspace.memberIds.map((id) => id.toString()) : [];
+  const guestIds = board.guestPermissions.map((g) => g.userId.toString());
+  const userIds = [...new Set([...memberIds, ...guestIds])];
+
+  const users = await UserModel.find({ _id: { $in: userIds } });
+  const people = users
+    .map((u) => ({ id: u._id.toString(), displayName: u.displayName, avatarUrl: u.avatarUrl }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+  res.json({ items: people });
+}
+
 export async function listBoardGuests(req: Request, res: Response) {
   const { boardId } = req.params;
 

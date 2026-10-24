@@ -7,6 +7,7 @@ import {
   updateBoard,
   deleteBoard,
   listBoardGuests,
+  listAssignablePeople,
   addBoardGuest,
   updateBoardGuestPermissions,
   removeBoardGuest,
@@ -28,6 +29,10 @@ router.delete("/boards/:boardId", deleteBoard);
 // these are deliberately separate from the workspace-level member routes
 // in workspaceRoutes.ts, not a variant of them.
 router.get("/boards/:boardId/guests", listBoardGuests);
+// Open to any caller with board access at all, member or guest — see
+// listAssignablePeople's own doc comment for why this is a separate,
+// narrower endpoint rather than widening listBoardGuests/listMembers.
+router.get("/boards/:boardId/assignable-people", listAssignablePeople);
 router.post("/boards/:boardId/guests", addBoardGuest);
 router.patch("/boards/:boardId/guests/:userId", updateBoardGuestPermissions);
 router.delete("/boards/:boardId/guests/:userId", removeBoardGuest);
