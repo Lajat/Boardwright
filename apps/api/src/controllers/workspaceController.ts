@@ -20,6 +20,7 @@ function toWorkspaceResponse(doc: any, memberPreview?: WorkspaceMemberPreview[])
     name: doc.name,
     ownerId: doc.ownerId.toString(),
     memberIds: doc.memberIds.map((id: Types.ObjectId) => id.toString()),
+    memberCount: doc.memberIds.length,
     createdAt: doc.createdAt.toISOString(),
     ...(memberPreview ? { memberPreview } : {}),
   };
@@ -95,12 +96,21 @@ export async function listMyWorkspaces(req: Request, res: Response) {
   res.json({
     items: allWorkspaces.map((workspace) => {
       if (!memberWorkspaceIds.has(workspace.id)) {
+        // memberIds and ownerId are blanked out here on purpose — a board
+        // guest doesn't get to see the workspace's real roster or who owns
+        // it, same as everywhere else that distinction is enforced. The
+        // real member COUNT isn't part of that: it's computed from the
+        // workspace doc's actual memberIds BEFORE stripping, passed
+        // through separately, so "N members" on the card stays honest
+        // without the stripped memberIds leaking anyone's identity.
+        const realMemberCount = workspace.memberIds.length;
         return {
           ...toWorkspaceResponse({
             ...workspace.toObject(),
             memberIds: [],
             ownerId: "",
           }),
+          memberCount: realMemberCount,
           isBoardGuest: true,
           myPermissions: {
             canAdd: false, canEdit: false, canDelete: false,
@@ -149,8 +159,12 @@ export async function getWorkspace(req: Request, res: Response) {
       guestPermissions: { $elemMatch: { userId: req.userId } },
     });
     if (guestBoard) {
+      // Same reasoning as listMyWorkspaces' guest branch: memberIds/ownerId
+      // are blanked for a guest caller, but the real member count isn't
+      // part of what's being kept private, so it's preserved separately.
       return res.json({
         ...toWorkspaceResponse({ ...workspace.toObject(), memberIds: [], ownerId: "" }),
+        memberCount: workspace.memberIds.length,
         isBoardGuest: true,
         myPermissions: {
           canAdd: false, canEdit: false, canDelete: false,
