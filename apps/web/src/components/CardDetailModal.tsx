@@ -190,7 +190,6 @@ export function CardDetailModal({
               </button>
             </div>
             <input
-              autoFocus
               id="card-detail-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
