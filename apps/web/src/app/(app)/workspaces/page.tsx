@@ -427,7 +427,7 @@ export default function WorkspacesPage() {
                     </div>
                     <div className="mt-0.5 flex items-center justify-between gap-2">
                       <p className="text-xs text-slate-400">
-                        {ws.memberIds.length} member{ws.memberIds.length === 1 ? "" : "s"}
+                        {ws.memberCount} member{ws.memberCount === 1 ? "" : "s"}
                       </p>
                       {ws.ownerId === user.id ? (
                         <span
@@ -442,7 +442,12 @@ export default function WorkspacesPage() {
                         // Same "role · preset" format as MembersModal's member
                         // row, so a workspace card and its own members list
                         // never disagree about what "Contributor" means here.
-                        ws.myPermissions && (
+                        // Gated on !ws.isBoardGuest: a board guest's
+                        // synthetic all-false permissions object happens to
+                        // match the Viewer preset exactly, which previously
+                        // rendered a "Member · Viewer" badge for someone who
+                        // isn't a workspace member at all.
+                        !ws.isBoardGuest && ws.myPermissions && (
                           <span
                             title={`${workspaceRoleLabel(ws.myPermissions)} — ${detectWorkspacePreset(ws.myPermissions) ?? "custom"} access`}
                             className="inline-flex shrink-0 items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"

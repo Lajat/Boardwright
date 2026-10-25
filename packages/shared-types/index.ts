@@ -26,7 +26,15 @@ export interface Workspace {
   id: string;
   name: string;
   ownerId: string; // User.id of the workspace creator
-  memberIds: string[]; // User.id[] of everyone with access
+  memberIds: string[]; // User.id[] of everyone with access — stripped to [] for a caller who's only a board guest, see isBoardGuest below
+  /**
+   * The real member count, always — even for a board-guest caller who gets
+   * memberIds stripped to []. A bare count isn't the privacy-sensitive part
+   * (who's in the roster is); showing "0 members" to someone who can see
+   * with their own eyes that other people are active on the board is just
+   * wrong, not private.
+   */
+  memberCount: number;
   createdAt: string;
   /** Lightweight profiles included by the workspace list endpoint for its member-avatar summary. */
   memberPreview?: WorkspaceMemberPreview[];
