@@ -16,6 +16,17 @@ export interface CardDocument extends Document {
   // time in cardController.createCard, never generated retroactively (a
   // stable, permanent id is the whole point of it).
   taskId?: string;
+  // Optional for the same reason taskId is: cards created before this
+  // field existed won't have one, and it's never backfilled retroactively
+  // — a stable record of "who actually did this" is only meaningful if
+  // it's set at the real moment of creation/edit, not guessed after the
+  // fact.
+  createdBy?: Types.ObjectId;
+  // Set alongside createdBy at creation (so a brand-new card already has a
+  // sensible "last updated by" before anyone's touched it), then
+  // reassigned on every updateCard call — but NOT on a drag-and-drop move
+  // between lists, which changes position, not content.
+  updatedBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +44,8 @@ const cardSchema = new Schema<CardDocument>(
     labels: [{ type: String }],
     priority: { type: String, enum: ["low", "medium", "high"] },
     taskId: { type: String },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+    updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   {
     // Adds and auto-maintains createdAt/updatedAt — no manual bookkeeping

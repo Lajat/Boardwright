@@ -19,7 +19,6 @@ function workspaceResponse(doc: any): Workspace {
     ownerId: doc.ownerId.toString(),
     memberIds: doc.memberIds.map((id: Types.ObjectId) => id.toString()),
     createdAt: doc.createdAt.toISOString(),
-    memberCount: doc.memberIds.length,
   };
 }
 

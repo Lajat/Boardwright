@@ -173,6 +173,13 @@ export interface Card {
   labels?: string[]; // color keywords, e.g. ["green", "red"]
   priority?: Priority;
   taskId?: string; // human-readable board-scoped id, e.g. "BT-7"
+  // Optional like taskId above, for the same reason: cards created before
+  // this field existed don't have one, and it's never backfilled. Raw User
+  // ids, not denormalized names — resolved on the client the same way
+  // assigneeId already is, against the assignable-people list it already
+  // has in state.
+  createdBy?: string;
+  updatedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
