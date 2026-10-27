@@ -44,6 +44,8 @@ function toCardResponse(doc: any): Card {
     labels: doc.labels ?? [],
     priority: doc.priority,
     taskId: doc.taskId,
+    createdBy: doc.createdBy?.toString(),
+    updatedBy: doc.updatedBy?.toString(),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
@@ -132,6 +134,8 @@ export async function createCard(req: Request, res: Response) {
     priority: priority || undefined,
     assigneeId: assigneeId || undefined,
     taskId,
+    createdBy: req.userId,
+    updatedBy: req.userId,
   });
 
   // Keep the list's cardOrder in sync — this array is the source of truth
@@ -228,6 +232,7 @@ export async function updateCard(req: Request, res: Response) {
       ...(labels !== undefined && { labels }),
       ...(priority !== undefined && { priority: priority || undefined }),
       ...(assigneeId !== undefined && { assigneeId: assigneeId || undefined }),
+      updatedBy: req.userId,
     },
     { new: true } // return the updated document, not the pre-update one
   );

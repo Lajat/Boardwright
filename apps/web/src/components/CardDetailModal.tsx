@@ -86,6 +86,20 @@ function formatDateLabel(date: string) {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
+// NOT formatDateLabel above — that one is for plain date-only strings
+// (dueDate, "2026-10-18") and manually appends a T00:00:00Z suffix to
+// parse them as UTC midnight. createdAt/updatedAt are already full ISO
+// datetimes with their own time component; running them through that same
+// append-a-suffix logic would double up the time part into an invalid
+// date string.
+function formatTimestampLabel(isoDateTime: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(isoDateTime));
+}
+
 function labelName(color: LabelColor) {
   return `${color[0].toUpperCase()}${color.slice(1)}`;
 }
@@ -352,6 +366,25 @@ export function CardDetailModal({
                 />
               ))}
             </div>
+          </div>
+
+          {/* Created/updated metadata — createdBy/updatedBy are raw user
+              ids, resolved against assignablePeople the same way
+              assigneeId is. Cards from before this field existed have
+              neither set; "Unknown" rather than hiding the line entirely,
+              so it's clear the information was never recorded, not just
+              omitted from this view. */}
+          <div className="flex flex-row justify-between gap-0.5 border-t border-slate-100 pt-3 text-xs text-slate-400">
+            <p>
+              Created {formatTimestampLabel(card.createdAt)} by{" "}
+              {assignablePeople.find((p) => p.id === card.createdBy)?.displayName ?? "Unknown"}
+            </p>
+            {card.updatedAt !== card.createdAt && (
+              <p>
+                Last updated {formatTimestampLabel(card.updatedAt)} by{" "}
+                {assignablePeople.find((p) => p.id === card.updatedBy)?.displayName ?? "Unknown"}
+              </p>
+            )}
           </div>
 
           <CommentSection cardId={card.id} />
