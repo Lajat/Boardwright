@@ -27,7 +27,7 @@ of the portfolio instead).
   Contributor, Full access) layered over per-person `canAdd`/`canEdit`/
   `canDelete` flags, settable by the workspace owner or an Admin (a member
   explicitly granted permission-management rights, short of full
-  ownership); board guests are capped at Contributor, since Full access
+  ownership); board guests are capped at Contributor(default)/Viewer, since Full access
   would let someone outside the workspace delete cards on a board they
   don't otherwise belong to
 - **Notifications** — invitations, access changes, and board/workspace
