@@ -22,6 +22,13 @@ const PORT = process.env.PORT || 4000;
 const WEB_ORIGIN = process.env.WEB_ORIGIN || "http://localhost:3000";
 
 const app = express();
+// Needed for the new rate limiter (lib/rateLimit.ts) to see each real
+// client's IP rather than the load balancer's — this app runs behind one
+// in production (Elastic Beanstalk's ALB), and without this, req.ip
+// reports the balancer's address for every request, putting everyone in
+// the same bucket. "1" trusts exactly one hop (the ALB) rather than
+// blindly trusting the whole X-Forwarded-For chain.
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use(cookieParser());
 // `credentials: true` is required for the browser to actually attach the
