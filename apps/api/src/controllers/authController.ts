@@ -4,7 +4,9 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { UserModel } from "../models/User";
 import type { User } from "@boardwright/shared-types";
+import { sendEmail, passwordResetEmailHtml } from "../lib/email";
 
+const WEB_ORIGIN = process.env.WEB_ORIGIN || "http://localhost:3000";
 const SALT_ROUNDS = 10;
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes — sent with every request
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — only used to mint new access tokens
@@ -259,20 +261,35 @@ export async function forgotPassword(req: Request, res: Response) {
 
   const user = await UserModel.findOne({ email: email.toLowerCase() });
 
+  // Same generic message whether the account exists or not — including in
+  // timing-sensitive terms, the real work below (hashing isn't involved
+  // here, but the token write + email send are) only happens on the
+  // `user` branch, so avoid doing anything that'd make the two paths
+  // visibly take different amounts of time where that's easy to avoid.
+  const message = "If an account exists with that email, a reset link has been sent to it.";
+
   if (!user) {
-    return res.json({
-      message: "If an account exists with that email, a reset link has been generated below.",
-    });
+    return res.json({ message });
   }
 
   user.resetToken = crypto.randomBytes(32).toString("hex");
   user.resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
   await user.save();
 
-  res.json({
-    message: "Reset link generated.",
-    resetToken: user.resetToken,
+  // The token is NEVER returned in this response — it previously was,
+  // which meant anyone who merely knew (or guessed, or found in a breach
+  // dump) a registered email address could call this endpoint and get back
+  // the literal credential needed to take over that account, with no
+  // access to the victim's inbox required. It only ever goes to the
+  // account's own email address now.
+  const resetLink = `${WEB_ORIGIN}/reset-password/${user.resetToken}`;
+  await sendEmail({
+    to: user.email,
+    subject: "Reset your Boardwright password",
+    html: passwordResetEmailHtml(resetLink),
   });
+
+  res.json({ message });
 }
 
 /**
