@@ -8,6 +8,14 @@ import { sendEmail, passwordResetEmailHtml } from "../lib/email";
 
 const WEB_ORIGIN = process.env.WEB_ORIGIN || "http://localhost:3000";
 const SALT_ROUNDS = 10;
+
+// SHA-256 rather than bcrypt on purpose: bcrypt's slowness defends
+// low-entropy secrets people choose (passwords). A reset token is 256 bits
+// of randomness, so there's nothing to brute-force, and a plain fast hash
+// is both sufficient and lets the database look the token up by value.
+function hashResetToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes — sent with every request
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — only used to mint new access tokens
 const ACCESS_TOKEN_TTL_JWT = "15m";
@@ -41,7 +49,17 @@ function toUserResponse(doc: any): User {
  * given user id. Kept as one helper so both signup and login mint tokens
  * identically — no risk of the two flows drifting apart over time.
  */
-function issueTokens(userId: string) {
+/**
+ * `tokenVersion` is stamped into both tokens as `tv`. It's only *checked*
+ * when a refresh token is redeemed (see refresh): resetting a password
+ * bumps the user's version, so every refresh token minted before the reset
+ * stops working at its next use instead of staying valid for its full 30
+ * days. Access tokens carry it too but aren't re-checked per request —
+ * that would add a database read to every authenticated call — so an
+ * already-issued access token can outlive a reset by up to its 15-minute
+ * lifetime, the usual trade-off for short-lived access + revocable refresh.
+ */
+function issueTokens(userId: string, tokenVersion: number) {
   const accessSecret = process.env.JWT_ACCESS_SECRET;
   const refreshSecret = process.env.JWT_REFRESH_SECRET;
 
@@ -49,8 +67,8 @@ function issueTokens(userId: string) {
     throw new Error("JWT secrets are not configured on the server");
   }
 
-  const accessToken = jwt.sign({ userId }, accessSecret, { expiresIn: ACCESS_TOKEN_TTL_JWT });
-  const refreshToken = jwt.sign({ userId }, refreshSecret, { expiresIn: REFRESH_TOKEN_TTL_JWT });
+  const accessToken = jwt.sign({ userId, tv: tokenVersion }, accessSecret, { expiresIn: ACCESS_TOKEN_TTL_JWT });
+  const refreshToken = jwt.sign({ userId, tv: tokenVersion }, refreshSecret, { expiresIn: REFRESH_TOKEN_TTL_JWT });
 
   return { accessToken, refreshToken };
 }
@@ -123,7 +141,7 @@ export async function signup(req: Request, res: Response) {
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const user = await UserModel.create({ email, passwordHash, displayName });
 
-  const { accessToken, refreshToken } = issueTokens(user._id.toString());
+  const { accessToken, refreshToken } = issueTokens(user._id.toString(), user.tokenVersion ?? 0);
   setAuthCookies(res, accessToken, refreshToken);
 
   res.status(201).json({ user: toUserResponse(user) });
@@ -155,7 +173,7 @@ export async function login(req: Request, res: Response) {
     return res.status(401).json(invalidCredentialsError);
   }
 
-  const { accessToken, refreshToken } = issueTokens(user._id.toString());
+  const { accessToken, refreshToken } = issueTokens(user._id.toString(), user.tokenVersion ?? 0);
   setAuthCookies(res, accessToken, refreshToken);
 
   res.json({ user: toUserResponse(user) });
@@ -182,15 +200,29 @@ export async function refresh(req: Request, res: Response) {
     throw new Error("JWT_REFRESH_SECRET is not configured on the server");
   }
 
+  let decoded: { userId: string; tv?: number };
   try {
-    const decoded = jwt.verify(refreshToken, refreshSecret) as { userId: string };
-    const tokens = issueTokens(decoded.userId);
-    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
-    res.json({ success: true });
+    decoded = jwt.verify(refreshToken, refreshSecret) as { userId: string; tv?: number };
   } catch (err) {
     clearAuthCookies(res); // an invalid/expired refresh token can't be used again — don't leave a dead cookie sitting there
-    res.status(401).json({ error: "invalid or expired refresh token" });
+    return res.status(401).json({ error: "invalid or expired refresh token" });
   }
+
+  // Outside the try on purpose: a database hiccup here should surface as a
+  // server error, not get mistaken for a bad token and wipe the person's
+  // cookies. A token minted before this feature existed has no `tv` and is
+  // treated as version 0, which is also what an existing user's missing
+  // tokenVersion defaults to — so sessions already open when this ships
+  // keep working until the next real password reset.
+  const user = await UserModel.findById(decoded.userId);
+  if (!user || (user.tokenVersion ?? 0) !== (decoded.tv ?? 0)) {
+    clearAuthCookies(res);
+    return res.status(401).json({ error: "invalid or expired refresh token" });
+  }
+
+  const tokens = issueTokens(user._id.toString(), user.tokenVersion ?? 0);
+  setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+  res.json({ success: true });
 }
 
 /**
@@ -272,7 +304,9 @@ export async function forgotPassword(req: Request, res: Response) {
     return res.json({ message });
   }
 
-  user.resetToken = crypto.randomBytes(32).toString("hex");
+  // Only the hash is stored; the raw token exists solely in the emailed link.
+  const rawResetToken = crypto.randomBytes(32).toString("hex");
+  user.resetTokenHash = hashResetToken(rawResetToken);
   user.resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
   await user.save();
 
@@ -282,7 +316,7 @@ export async function forgotPassword(req: Request, res: Response) {
   // the literal credential needed to take over that account, with no
   // access to the victim's inbox required. It only ever goes to the
   // account's own email address now.
-  const resetLink = `${WEB_ORIGIN}/reset-password/${user.resetToken}`;
+  const resetLink = `${WEB_ORIGIN}/reset-password/${rawResetToken}`;
   await sendEmail({
     to: user.email,
     subject: "Reset your Boardwright password",
@@ -309,16 +343,23 @@ export async function resetPassword(req: Request, res: Response) {
     return res.status(400).json({ error: "password must be at least 8 characters" });
   }
 
-  const user = await UserModel.findOne({ resetToken: token });
+  const user = await UserModel.findOne({ resetTokenHash: hashResetToken(String(token)) });
 
   if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt.getTime() < Date.now()) {
     return res.status(400).json({ error: "this reset link is invalid or has expired" });
   }
 
   user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-  user.resetToken = undefined;
+  user.resetTokenHash = undefined;
   user.resetTokenExpiresAt = undefined;
+  // Invalidates every refresh token issued before now (see issueTokens).
+  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
   await user.save();
+
+  // Also cut any websocket already open for this account — otherwise a
+  // session that was live at the moment of the reset would keep receiving
+  // board events until it happened to disconnect on its own.
+  req.app.get("io")?.in(`user:${user._id.toString()}`).disconnectSockets(true);
 
   res.json({ success: true });
 }
