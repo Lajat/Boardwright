@@ -16,12 +16,20 @@ export interface UserDocument extends Document {
   passwordHash: string;
   displayName: string;
   avatarUrl?: string;
-  // Password-reset token + its expiry — both unset except during the
-  // brief window between requesting a reset and actually using it (or
-  // until it expires unused). See authController's forgotPassword /
-  // resetPassword for the full flow.
-  resetToken?: string;
+  // SHA-256 hash of the password-reset token — never the token itself. The
+  // raw token only ever exists in the emailed link; if this collection is
+  // ever read by someone who shouldn't (a leaked backup, an injection bug),
+  // a hash can't be turned back into a working reset link. Both fields are
+  // unset except during the brief window between requesting a reset and
+  // using it (or until it expires unused). See authController's
+  // forgotPassword / resetPassword for the full flow.
+  resetTokenHash?: string;
   resetTokenExpiresAt?: Date;
+  // Bumped whenever the password is reset. It's embedded in every refresh
+  // token at the time it's issued and checked when that token is used, so
+  // a reset immediately kills every session that existed before it —
+  // JWTs are otherwise stateless and would stay valid until they expire.
+  tokenVersion: number;
   createdAt: Date;
 }
 
@@ -30,8 +38,9 @@ const userSchema = new Schema<UserDocument>({
   passwordHash: { type: String, required: true },
   displayName: { type: String, required: true, trim: true },
   avatarUrl: { type: String },
-  resetToken: { type: String, index: true, sparse: true },
+  resetTokenHash: { type: String, index: true, sparse: true },
   resetTokenExpiresAt: { type: Date },
+  tokenVersion: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
 });
 
