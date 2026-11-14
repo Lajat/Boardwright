@@ -17,6 +17,7 @@ import cardRoutes from "./routes/cardRoutes";
 import commentRoutes from "./routes/commentRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import invitationRoutes from "./routes/invitationRoutes";
+import { isSessionCurrent } from "./lib/session";
 
 const PORT = process.env.PORT || 4000;
 const WEB_ORIGIN = process.env.WEB_ORIGIN || "http://localhost:3000";
@@ -80,18 +81,28 @@ function removeBoardPresence(boardId: string, userId: string, socketId: string) 
   broadcastBoardPresence(boardId);
 }
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const ticket = socket.handshake.auth?.ticket;
-  const userId = typeof ticket === "string"
+  const identity = typeof ticket === "string"
     ? getUserIdFromSocketTicket(ticket)
     : getUserIdFromHandshake(socket.handshake.headers.cookie);
 
-  if (!userId) {
+  // The same version check every HTTP request gets (see requireAuth): a
+  // valid signature isn't enough if a password reset has since invalidated
+  // the session this token came from. Any failure here, including the
+  // lookup itself erroring, refuses the connection — a socket is
+  // re-attempted by the client on its own, so failing closed costs nothing.
+  try {
+    if (!identity || !(await isSessionCurrent(identity.userId, identity.tv))) {
+      next(new Error("Socket authentication failed"));
+      return;
+    }
+  } catch {
     next(new Error("Socket authentication failed"));
     return;
   }
 
-  socket.data.userId = userId;
+  socket.data.userId = identity.userId;
   next();
 });
 
@@ -174,7 +185,7 @@ io.on("connection", (socket) => {
  * the userId it encodes, or undefined if the cookie is missing, malformed,
  * or the token itself is invalid/expired.
  */
-function getUserIdFromHandshake(cookieHeader: string | undefined): string | undefined {
+function getUserIdFromHandshake(cookieHeader: string | undefined): { userId: string; tv?: number } | undefined {
   if (!cookieHeader) return undefined;
 
   const accessToken = cookieHeader
@@ -188,23 +199,24 @@ function getUserIdFromHandshake(cookieHeader: string | undefined): string | unde
   try {
     const secret = process.env.JWT_ACCESS_SECRET;
     if (!secret) return undefined;
-    const decoded = jwt.verify(decodeURIComponent(accessToken), secret) as { userId: string };
-    return decoded.userId;
+    const decoded = jwt.verify(decodeURIComponent(accessToken), secret) as { userId: string; tv?: number };
+    return { userId: decoded.userId, tv: decoded.tv };
   } catch {
     return undefined;
   }
 }
 
-function getUserIdFromSocketTicket(ticket: string): string | undefined {
+function getUserIdFromSocketTicket(ticket: string): { userId: string; tv?: number } | undefined {
   try {
     const secret = process.env.JWT_ACCESS_SECRET;
     if (!secret) return undefined;
     const decoded = jwt.verify(ticket, secret, { audience: "boardwright-socket" }) as {
       userId?: unknown;
+      tv?: unknown;
       purpose?: unknown;
     };
     return decoded.purpose === "socket" && typeof decoded.userId === "string"
-      ? decoded.userId
+      ? { userId: decoded.userId, tv: typeof decoded.tv === "number" ? decoded.tv : undefined }
       : undefined;
   } catch {
     return undefined;
