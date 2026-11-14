@@ -267,8 +267,12 @@ export function createSocketTicket(req: Request, res: Response) {
     throw new Error("JWT_ACCESS_SECRET is not configured on the server");
   }
 
+  // tv is the tokenVersion the caller's access token was issued under (set
+  // by requireAuth), checked again when the socket actually connects — so a
+  // ticket minted moments before a password reset is dead on arrival too,
+  // rather than being good for its remaining ~60 seconds.
   const ticket = jwt.sign(
-    { userId: req.userId, purpose: "socket" },
+    { userId: req.userId, tv: req.tokenVersion ?? 0, purpose: "socket" },
     secret,
     { expiresIn: SOCKET_TICKET_TTL_SECONDS, audience: "boardwright-socket" }
   );
@@ -280,9 +284,10 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * POST /auth/forgot-password
- * Generates a one-time, expiring password-reset token. The current app
- * returns the token to the caller because it does not yet have an email
- * delivery service; the token is still stored with a one-hour expiry.
+ * Generates a one-time, expiring (one hour) password-reset token and emails
+ * a link containing it to the account's own address. The response is the
+ * same generic message whether or not the account exists, and never contains
+ * the token. Only a SHA-256 hash of the token is stored (see hashResetToken).
  */
 export async function forgotPassword(req: Request, res: Response) {
   const { email } = req.body;
