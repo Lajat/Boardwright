@@ -98,8 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clears both cookies server-side — unlike localStorage, an httpOnly
       // cookie can't just be deleted client-side, so this request is what
       // actually ends the session rather than merely hiding it from this
-      // one tab.
-      await apiFetch("/auth/logout", { method: "POST" });
+      // one tab. It also revokes this login's session server-side, which
+      // needs the refresh cookie — and the browser only attaches that to
+      // paths under /auth/refresh, hence the unusual URL (the plain
+      // /auth/logout still works, but only sees the access cookie, which
+      // is gone after 15 idle minutes).
+      await apiFetch("/auth/refresh/logout", { method: "POST" });
     } catch (err) {
       // Even if this call fails (e.g. the API is briefly unreachable),
       // still proceed with clearing local state below — a stuck "can't

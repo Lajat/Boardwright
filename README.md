@@ -18,7 +18,9 @@ of the portfolio instead).
 - **Auth** — signup/login/refresh via httpOnly JWT cookies. Password reset
   is emailed (Resend free tier), single-use, expires in an hour, and only a
   SHA-256 hash of the token is stored; resetting a password signs out every
-  existing session. Login and forgot-password are rate-limited per IP.
+  existing session, and logging out revokes that one login server-side (a
+  copied refresh token stops working) without touching your other devices.
+  Login and forgot-password are rate-limited per IP.
 - **Workspaces** — create a workspace, invite teammates via a shareable
   link, owner-controlled membership
 - **Board guests** — invite someone to a single board without giving them
@@ -29,7 +31,7 @@ of the portfolio instead).
   Contributor, Full access) layered over per-person `canAdd`/`canEdit`/
   `canDelete` flags, settable by the workspace owner or an Admin (a member
   explicitly granted permission-management rights, short of full
-  ownership); board guests are capped at Contributor (default)/Viewer, since Full access
+  ownership); board guests are capped at Contributor, since Full access
   would let someone outside the workspace delete cards on a board they
   don't otherwise belong to
 - **Notifications** — invitations, access changes, and board/workspace
