@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { UserModel } from "../models/User";
 import type { User } from "@boardwright/shared-types";
+import { RevokedSessionModel } from "../models/RevokedSession";
 import { sendEmail, passwordResetEmailHtml } from "../lib/email";
 
 const WEB_ORIGIN = process.env.WEB_ORIGIN || "http://localhost:3000";
@@ -15,6 +16,13 @@ const SALT_ROUNDS = 10;
 // is both sufficient and lets the database look the token up by value.
 function hashResetToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+// Random per login, then carried unchanged through every refresh of that
+// login. It's what lets logout revoke ONE session (see RevokedSession)
+// instead of the user's whole account, which is all tokenVersion can do.
+function newSessionId(): string {
+  return crypto.randomBytes(16).toString("hex");
 }
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes — sent with every request
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — only used to mint new access tokens
@@ -59,7 +67,7 @@ function toUserResponse(doc: any): User {
  * already-issued access token can outlive a reset by up to its 15-minute
  * lifetime, the usual trade-off for short-lived access + revocable refresh.
  */
-function issueTokens(userId: string, tokenVersion: number) {
+function issueTokens(userId: string, tokenVersion: number, sid: string) {
   const accessSecret = process.env.JWT_ACCESS_SECRET;
   const refreshSecret = process.env.JWT_REFRESH_SECRET;
 
@@ -67,8 +75,8 @@ function issueTokens(userId: string, tokenVersion: number) {
     throw new Error("JWT secrets are not configured on the server");
   }
 
-  const accessToken = jwt.sign({ userId, tv: tokenVersion }, accessSecret, { expiresIn: ACCESS_TOKEN_TTL_JWT });
-  const refreshToken = jwt.sign({ userId, tv: tokenVersion }, refreshSecret, { expiresIn: REFRESH_TOKEN_TTL_JWT });
+  const accessToken = jwt.sign({ userId, tv: tokenVersion, sid }, accessSecret, { expiresIn: ACCESS_TOKEN_TTL_JWT });
+  const refreshToken = jwt.sign({ userId, tv: tokenVersion, sid }, refreshSecret, { expiresIn: REFRESH_TOKEN_TTL_JWT });
 
   return { accessToken, refreshToken };
 }
@@ -141,7 +149,7 @@ export async function signup(req: Request, res: Response) {
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const user = await UserModel.create({ email, passwordHash, displayName });
 
-  const { accessToken, refreshToken } = issueTokens(user._id.toString(), user.tokenVersion ?? 0);
+  const { accessToken, refreshToken } = issueTokens(user._id.toString(), user.tokenVersion ?? 0, newSessionId());
   setAuthCookies(res, accessToken, refreshToken);
 
   res.status(201).json({ user: toUserResponse(user) });
@@ -173,7 +181,7 @@ export async function login(req: Request, res: Response) {
     return res.status(401).json(invalidCredentialsError);
   }
 
-  const { accessToken, refreshToken } = issueTokens(user._id.toString(), user.tokenVersion ?? 0);
+  const { accessToken, refreshToken } = issueTokens(user._id.toString(), user.tokenVersion ?? 0, newSessionId());
   setAuthCookies(res, accessToken, refreshToken);
 
   res.json({ user: toUserResponse(user) });
@@ -200,9 +208,9 @@ export async function refresh(req: Request, res: Response) {
     throw new Error("JWT_REFRESH_SECRET is not configured on the server");
   }
 
-  let decoded: { userId: string; tv?: number };
+  let decoded: { userId: string; tv?: number; sid?: string };
   try {
-    decoded = jwt.verify(refreshToken, refreshSecret) as { userId: string; tv?: number };
+    decoded = jwt.verify(refreshToken, refreshSecret) as { userId: string; tv?: number; sid?: string };
   } catch (err) {
     clearAuthCookies(res); // an invalid/expired refresh token can't be used again — don't leave a dead cookie sitting there
     return res.status(401).json({ error: "invalid or expired refresh token" });
@@ -220,7 +228,18 @@ export async function refresh(req: Request, res: Response) {
     return res.status(401).json({ error: "invalid or expired refresh token" });
   }
 
-  const tokens = issueTokens(user._id.toString(), user.tokenVersion ?? 0);
+  // A session that was logged out can't be refreshed, even though the token
+  // itself is still validly signed and unexpired — that's the whole case
+  // this guards: a refresh token copied before logout. A token from before
+  // session ids existed has no sid, so there's nothing to revoke it by; it
+  // gets one here, on its first refresh after this shipped, and is
+  // revocable from then on.
+  if (decoded.sid && (await RevokedSessionModel.exists({ sid: decoded.sid }))) {
+    clearAuthCookies(res);
+    return res.status(401).json({ error: "invalid or expired refresh token" });
+  }
+
+  const tokens = issueTokens(user._id.toString(), user.tokenVersion ?? 0, decoded.sid ?? newSessionId());
   setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
   res.json({ success: true });
 }
@@ -233,8 +252,51 @@ export async function refresh(req: Request, res: Response) {
  * request the server responds to with a Set-Cookie that expires them.
  */
 export async function logout(req: Request, res: Response) {
+  // Whichever cookie reaches this request tells us which session to end.
+  // The refresh cookie is scoped to /api-proxy/auth/refresh, so the browser
+  // only sends it to a path under that — which is why this handler is also
+  // mounted at /auth/refresh/logout (see authRoutes) and the web client
+  // logs out there. The access cookie (sent to every path) is the fallback
+  // for the plain /auth/logout path, but it vanishes from the browser after
+  // 15 idle minutes, which is exactly when a stale tab's "log out" click
+  // would otherwise have nothing to identify the session by.
+  const sid =
+    sidFromCookie(req.cookies?.refreshToken, process.env.JWT_REFRESH_SECRET) ??
+    sidFromCookie(req.cookies?.accessToken, process.env.JWT_ACCESS_SECRET);
+
+  // Cookies are cleared first, so even if recording the revocation fails the
+  // browser is still logged out locally and the error reaches the client
+  // instead of being swallowed — a logout that silently didn't revoke the
+  // session would be worse than one that visibly errored.
   clearAuthCookies(res);
+
+  if (sid) {
+    await RevokedSessionModel.updateOne(
+      { sid },
+      // Upper bound on how long any refresh token in this session could
+      // still be alive; the TTL index deletes the row then.
+      { $setOnInsert: { expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS) } },
+      { upsert: true }
+    );
+  }
+
   res.json({ success: true });
+}
+
+/**
+ * The session id inside a token, if the token is genuinely ours. Expiry is
+ * deliberately ignored: logging out with an expired access token is normal,
+ * and it still unambiguously says which session it belonged to. A forged or
+ * garbled token fails the signature check and yields nothing.
+ */
+function sidFromCookie(token: unknown, secret: string | undefined): string | undefined {
+  if (typeof token !== "string" || !secret) return undefined;
+  try {
+    const decoded = jwt.verify(token, secret, { ignoreExpiration: true }) as { sid?: unknown };
+    return typeof decoded.sid === "string" ? decoded.sid : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

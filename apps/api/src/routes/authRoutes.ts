@@ -26,6 +26,9 @@ router.post("/auth/signup", signup);
 router.post("/auth/login", rateLimit("login", 10, 15 * 60 * 1000), login);
 router.post("/auth/refresh", refresh);
 router.post("/auth/logout", logout);
+// Same handler, mounted under the refresh cookie's path so the browser
+// attaches that cookie — see logout's own comment for why that matters.
+router.post("/auth/refresh/logout", logout);
 router.post("/auth/forgot-password", rateLimit("forgot-password", 10, 15 * 60 * 1000), forgotPassword);
 router.post("/auth/reset-password", resetPassword);
 
