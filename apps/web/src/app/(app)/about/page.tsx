@@ -25,7 +25,7 @@ const features = [
   },
   {
     title: "Card details",
-    description: "Track due dates, priority, labels, assignees, task IDs, and conversations.",
+    description: "Track due dates, priority, labels, assignees, task IDs, conversations, and who created or last edited each card.",
   },
 ];
 

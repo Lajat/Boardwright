@@ -42,11 +42,13 @@ of the portfolio instead).
   within a list and across lists, with a database-level guard against a
   card ending up recorded in two lists at once
 - **Card details** — description, due date (can't be set in the past),
-  color labels, priority, assignee, a short human-readable id (e.g. `TT-7`)
+  color labels, priority, assignee (anyone with access to the board, guests
+  included), a short human-readable id (e.g. `TT-7`), and who created the
+  card and who last edited it, and when
 - **Board search and filters** — find cards by text, assignee, priority, due
   date, or label; teammate avatars provide quick assignee filters
-- **Live board presence** — see which workspace members currently have a
-  board open; presence is temporary and tracked per API instance
+- **Live board presence** — see which members and board guests currently
+  have a board open; presence is temporary and tracked per API instance
 - **Comments** — a discussion thread on every card
 - **Real-time sync** — every mutation (card moved, list reordered, comment
   added, workspace deleted, member removed, etc.) is broadcast live to
@@ -92,16 +94,14 @@ the sidebar, and a deleted workspace staying stale there too):
 
 ```mermaid
 flowchart LR
-    subgraph BR["Board room"]
-        A["card:moved<br/>card:created<br/>comment:added<br/>board:guest-added<br/>board:guest-removed"]
+    subgraph board["Board room (board:boardId)"]
+        A["card:created<br/>card:updated<br/>card:deleted<br/>card:moved<br/>comment:added<br/>list:created<br/>list:updated<br/>list:reordered<br/>list:deleted<br/>board:updated<br/>board:guest-added<br/>board:guest-removed<br/>board:presence-updated"]
     end
-
-    subgraph WR["Workspace room"]
-        B["board:created<br/>board:deleted"]
+    subgraph workspace["Workspace room (workspace:workspaceId)"]
+        B["board:created<br/>board:updated<br/>board:deleted<br/>workspace:updated<br/>workspace:deleted<br/>workspace:member-added<br/>workspace:member-removed<br/>workspace:member-permissions-updated"]
     end
-
-    subgraph PR["Personal room"]
-        C["user:userId<br/>member:added<br/>access:revoked<br/>workspace:deleted"]
+    subgraph personal["Personal room (user:userId)"]
+        C["workspace:member-added<br/>workspace:member-permissions-updated<br/>workspace:access-granted<br/>workspace:access-revoked<br/>workspace:deleted<br/>notification:created<br/>notification:updated"]
     end
 ```
 
@@ -145,6 +145,7 @@ the other if they've drifted — not a runtime bug discovered later.
 | Real-time | Socket.io |
 | Database | MongoDB Atlas (Mongoose) |
 | Auth | JWT in httpOnly cookies (access + refresh) |
+| Email | Resend (free tier), called with Node's built-in `fetch` — no SDK |
 | Deploy | Vercel (frontend) · AWS Elastic Beanstalk + CloudFront (backend) |
 | CI/CD | GitHub Actions — build, typecheck, integration tests, auto-deploy |
 | Monorepo tooling | pnpm workspaces + Turborepo |
@@ -153,7 +154,7 @@ the other if they've drifted — not a runtime bug discovered later.
 
 ```bash
 pnpm install
-cp apps/api/.env.example apps/api/.env   # fill in MongoDB URI + JWT secrets
+cp apps/api/.env.example apps/api/.env   # fill in MongoDB URI + JWT secrets (RESEND_API_KEY is optional: unset, reset emails print to the server console)
 cp apps/web/.env.example apps/web/.env
 pnpm dev        # runs both apps/web and apps/api in parallel via Turborepo
 ```
@@ -164,6 +165,16 @@ pnpm dev        # runs both apps/web and apps/api in parallel via Turborepo
 - Dragging to reorder lists themselves (only cards are draggable; column
   order is fixed)
 - Real-time cursors and card-level editing indicators
+
+## Known limitations
+
+- Rate limiting and live presence are held in memory, per API instance. That
+  is correct for today's single-instance deployment; behind a load balancer
+  with several instances each would count separately and need a shared store.
+- Logging out revokes that login's refresh token immediately, but an access
+  token already issued still works until it expires (at most 15 minutes), and
+  a websocket already open stays connected until it drops. A password reset
+  has no such window — it invalidates access tokens and sockets at once.
 
 ## License
 
