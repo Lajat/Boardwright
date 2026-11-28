@@ -92,14 +92,16 @@ the sidebar, and a deleted workspace staying stale there too):
 
 ```mermaid
 flowchart LR
-    subgraph Board room
+    subgraph BR["Board room"]
         A["card:moved<br/>card:created<br/>comment:added<br/>board:guest-added<br/>board:guest-removed"]
     end
-    subgraph Workspace room
+
+    subgraph WR["Workspace room"]
         B["board:created<br/>board:deleted"]
     end
-    subgraph Personal room<br/>(user:userId)
-        C["member:added<br/>access:revoked<br/>workspace:deleted"]
+
+    subgraph PR["Personal room"]
+        C["user:userId<br/>member:added<br/>access:revoked<br/>workspace:deleted"]
     end
 ```
 
